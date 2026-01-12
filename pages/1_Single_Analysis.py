@@ -1674,12 +1674,13 @@ if analyze_btn and ticker:
                 st.markdown("*Latest news articles and market updates related to this stock*")
                 
                 try:
+                    # Get top news articles
+                    news_limit = st.slider("Number of articles to display", 5, 20, 10, key=f"news_limit_{ticker}")
+                    
                     with st.spinner(f"Fetching latest news for {ticker}..."):
-                        # Get top news articles
-                        news_limit = st.slider("Number of articles to display", 5, 20, 10, key=f"news_limit_{ticker}")
                         news_articles = news_market.get_stock_news(ticker, limit=news_limit)
-                        
-                        if news_articles and len(news_articles) > 0:
+                    
+                    if news_articles and len(news_articles) > 0:
                             st.success(f"✅ Found {len(news_articles)} news article(s)")
                             
                             # Display news articles

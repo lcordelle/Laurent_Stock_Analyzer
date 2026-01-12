@@ -26,7 +26,73 @@ class NewsMarketData:
                 news = stock.news
                 if news is None:
                     news = []
-            except Exception:
+                # Check if news is a list and has items
+                if isinstance(news, list) and len(news) > 0:
+                    # Format news items directly from yfinance
+                    formatted_news = []
+                    for item in news[:limit]:
+                        try:
+                            # yfinance news structure - handle both old and new formats
+                            title = item.get('title') or item.get('headline', 'No title')
+                            
+                            # Publisher extraction - try multiple fields
+                            publisher = (item.get('publisher') or 
+                                        item.get('source') or 
+                                        item.get('provider') or
+                                        (item.get('provider', {}) if isinstance(item.get('provider'), dict) else {}).get('displayName') or
+                                        (item.get('provider', {}) if isinstance(item.get('provider'), dict) else {}).get('name') or
+                                        'Yahoo Finance')
+                            
+                            # Link extraction
+                            link = item.get('link') or item.get('url') or item.get('canonicalUrl') or '#'
+                            
+                            # Handle timestamp
+                            published_time = None
+                            timestamp = (item.get('providerPublishTime') or 
+                                       item.get('pubDate') or 
+                                       item.get('publishedAt') or
+                                       item.get('publishTime'))
+                            if timestamp:
+                                try:
+                                    if isinstance(timestamp, (int, float)):
+                                        if timestamp > 1e12:  # milliseconds
+                                            timestamp = timestamp / 1000
+                                        published_time = datetime.fromtimestamp(timestamp)
+                                        if published_time.tzinfo:
+                                            published_time = published_time.replace(tzinfo=None)
+                                except:
+                                    pass
+                            
+                            # Get summary/description
+                            summary = (item.get('summary') or 
+                                     item.get('description') or 
+                                     item.get('text') or
+                                     'No summary available')
+                            if summary and isinstance(summary, str):
+                                summary = summary[:300] + '...' if len(summary) > 300 else summary
+                            
+                            # Fix link
+                            if link and link != '#':
+                                if not link.startswith('http'):
+                                    if link.startswith('/'):
+                                        link = f"https://finance.yahoo.com{link}"
+                                    else:
+                                        link = f"https://finance.yahoo.com/{link}"
+                            
+                            if title and title != 'No title':
+                                formatted_news.append({
+                                    'title': title,
+                                    'publisher': publisher if publisher else 'Yahoo Finance',
+                                    'link': link,
+                                    'published': published_time,
+                                    'summary': summary
+                                })
+                        except Exception as e:
+                            continue  # Skip malformed items
+                    
+                    if formatted_news:
+                        return formatted_news
+            except Exception as e:
                 news = []
             
             # Method 2: If no news, try direct API call to Yahoo Finance

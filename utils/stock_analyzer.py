@@ -93,14 +93,41 @@ class StockAnalyzer:
         self.cache = {}
         # Create a session with proper headers to avoid Yahoo Finance blocking
         self.session = _create_yfinance_session()
+        # Track last request time to avoid rate limiting
+        self.last_request_time = 0
+        self.min_request_interval = 1.5  # Minimum seconds between requests
+    
+    def _rate_limit(self):
+        """Enforce rate limiting between requests"""
+        current_time = time.time()
+        time_since_last = current_time - self.last_request_time
+        if time_since_last < self.min_request_interval:
+            sleep_time = self.min_request_interval - time_since_last
+            time.sleep(sleep_time)
+        self.last_request_time = time.time()
+    
+    def _refresh_session(self):
+        """Create a new session with fresh headers"""
+        self.session = _create_yfinance_session()
     
     def get_stock_data(self, ticker, period="1y"):
         """Fetch comprehensive stock data with caching and improved error handling"""
         # Clean ticker symbol
         ticker = str(ticker).upper().strip()
         
+        # Check cache first
+        cache_key = f"{ticker}_{period}"
+        if cache_key in self.cache:
+            cached_data = self.cache[cache_key]
+            # Check if cache is still valid (5 minutes)
+            if time.time() - cached_data.get('timestamp', 0) < 300:
+                return cached_data.get('data')
+        
+        # Enforce rate limiting
+        self._rate_limit()
+        
         # Try multiple times with retry logic for cloud environments
-        max_retries = 3
+        max_retries = 5  # Increased retries
         last_error = None
         
         for attempt in range(max_retries):
@@ -247,7 +274,7 @@ class StockAnalyzer:
                 
                 # Validate we have at least history data
                 if hist is not None and len(hist) > 0:
-                    return {
+                    result = {
                         'ticker': ticker,
                         'history': hist,
                         'info': info,
@@ -256,6 +283,12 @@ class StockAnalyzer:
                         'cash_flow': cash_flow,
                         'stock_object': stock
                     }
+                    # Cache the result
+                    self.cache[cache_key] = {
+                        'data': result,
+                        'timestamp': time.time()
+                    }
+                    return result
                 else:
                     if attempt < max_retries - 1:
                         time.sleep(1)

@@ -8,6 +8,7 @@ import pandas as pd
 import numpy as np
 import warnings
 import requests
+import time
 warnings.filterwarnings('ignore')
 
 class StockAnalyzer:
@@ -15,11 +16,19 @@ class StockAnalyzer:
     
     def __init__(self):
         self.cache = {}
+        # Create a session with proper headers to avoid Yahoo Finance blocking
+        self.session = requests.Session()
+        self.session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Accept-Encoding': 'gzip, deflate',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+        })
     
     def get_stock_data(self, ticker, period="1y"):
         """Fetch comprehensive stock data with caching and improved error handling"""
-        import time
-        
         # Clean ticker symbol
         ticker = str(ticker).upper().strip()
         
@@ -27,27 +36,30 @@ class StockAnalyzer:
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                # Use yfinance with better error handling for cloud environments
-                stock = yf.Ticker(ticker)
+                # Use yfinance with custom session to avoid blocking
+                stock = yf.Ticker(ticker, session=self.session)
                 
-                # Try to fetch history data with timeout
-                try:
-                    hist = stock.history(period=period, timeout=30)
-                except Exception as hist_error:
-                    # If history fails, try shorter period
+                # Try to fetch history data with timeout and retry
+                hist = None
+                periods_to_try = [period, "6mo", "3mo", "1mo"]
+                
+                for try_period in periods_to_try:
                     try:
-                        hist = stock.history(period="6mo", timeout=30)
-                    except:
-                        try:
-                            hist = stock.history(period="3mo", timeout=30)
-                        except:
-                            hist = None
+                        hist = stock.history(period=try_period, timeout=30)
+                        if hist is not None and len(hist) > 0:
+                            break
+                    except Exception as hist_error:
+                        # Log the error but continue trying
+                        continue
                 
-                # Check if we got valid data
+                # If all periods failed, wait and retry on next attempt
                 if hist is None or len(hist) == 0:
                     if attempt < max_retries - 1:
-                        time.sleep(1)  # Wait before retry
+                        # Exponential backoff: wait longer on each retry
+                        wait_time = (attempt + 1) * 2
+                        time.sleep(wait_time)
                         continue
+                    
                     # Last attempt failed - try to get at least some data
                     # Sometimes info works even if history doesn't
                     try:

@@ -11,6 +11,45 @@ import requests
 import time
 warnings.filterwarnings('ignore')
 
+# Monkey-patch yfinance's base session to always use proper headers
+# This ensures ALL yfinance requests use our headers, even if session parameter is ignored
+_original_get = requests.Session.get
+_original_request = requests.Session.request
+
+def _patched_get(self, url, **kwargs):
+    """Patched get method to always include proper headers"""
+    if 'headers' not in kwargs:
+        kwargs['headers'] = {}
+    if 'User-Agent' not in kwargs['headers']:
+        kwargs['headers'].update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+        })
+    return _original_get(self, url, **kwargs)
+
+def _patched_request(self, method, url, **kwargs):
+    """Patched request method to always include proper headers"""
+    if 'headers' not in kwargs:
+        kwargs['headers'] = {}
+    if 'User-Agent' not in kwargs['headers']:
+        kwargs['headers'].update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+        })
+    return _original_request(self, method, url, **kwargs)
+
+# Apply monkey patch
+requests.Session.get = _patched_get
+requests.Session.request = _patched_request
+
 # Configure yfinance globally to use proper headers
 def _create_yfinance_session():
     """Create a session with proper headers for yfinance"""
@@ -28,9 +67,6 @@ def _create_yfinance_session():
         'Cache-Control': 'max-age=0',
     })
     return session
-
-# Set default session for yfinance
-_yf_session = _create_yfinance_session()
 
 class StockAnalyzer:
     """Advanced Stock Analysis Engine"""

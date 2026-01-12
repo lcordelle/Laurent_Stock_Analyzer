@@ -8,4 +8,6 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
+      - key: ALPHA_VANTAGE_API_KEY
+        value: 0SD4K06XAEF1P5DI
 

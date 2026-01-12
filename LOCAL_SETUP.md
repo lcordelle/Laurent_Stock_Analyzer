@@ -29,19 +29,17 @@ http://localhost:8501
 
 ### Step 3: Access on Your iPad (Same WiFi)
 
-1. **Find your Mac's IP address:**
-   ```bash
-   ifconfig | grep "inet " | grep -v 127.0.0.1
-   ```
-   
-   Look for something like: `192.168.1.100` or `10.0.0.5`
+**Your Mac's IP address:** `192.168.0.113`
 
-2. **On your iPad, open Safari and go to:**
-   ```
-   http://YOUR_MAC_IP:8501
-   ```
-   
-   Example: `http://192.168.1.100:8501`
+**On your iPad, open Safari and go to:**
+```
+http://192.168.0.113:8501
+```
+
+**Note:** If your IP changes (after reconnecting to WiFi), find it again with:
+```bash
+ifconfig | grep "inet " | grep -v 127.0.0.1
+```
 
 ---
 

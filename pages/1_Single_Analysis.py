@@ -1681,10 +1681,10 @@ if analyze_btn and ticker:
                         news_articles = news_market.get_stock_news(ticker, limit=news_limit)
                     
                     if news_articles and len(news_articles) > 0:
-                            st.success(f"✅ Found {len(news_articles)} news article(s)")
-                            
-                            # Display news articles
-                            for idx, article in enumerate(news_articles, 1):
+                        st.success(f"✅ Found {len(news_articles)} news article(s)")
+                        
+                        # Display news articles
+                        for idx, article in enumerate(news_articles, 1):
                                 # Determine article importance/recency
                                 time_ago = ""
                                 published_dt = article.get('published')
@@ -1793,19 +1793,19 @@ if analyze_btn and ticker:
                                 # Add separator between articles (except last one)
                                 if idx < len(news_articles):
                                     st.markdown("---")
-                        elif news_articles is not None and len(news_articles) == 0:
-                            st.warning(f"⚠️ No news articles found for {ticker}.")
-                            st.info("💡 This may be due to:\n"
-                                  "- Limited news coverage for this stock\n"
-                                  "- Temporary unavailability of news data\n"
-                                  "- Newly listed stock with no news yet\n\n"
-                                  "**Tip:** Try a major stock ticker like AAPL, MSFT, or GOOGL to test the news feature.")
-                        else:
-                            st.warning(f"⚠️ Unable to fetch news for {ticker}.")
-                            st.info("💡 News data may not be available for this stock. This could be due to:\n"
-                                  "- Limited coverage from news sources\n"
-                                  "- Newly listed stock\n"
-                                  "- Data source limitations")
+                    elif news_articles is not None and len(news_articles) == 0:
+                        st.warning(f"⚠️ No news articles found for {ticker}.")
+                        st.info("💡 This may be due to:\n"
+                              "- Limited news coverage for this stock\n"
+                              "- Temporary unavailability of news data\n"
+                              "- Newly listed stock with no news yet\n\n"
+                              "**Tip:** Try a major stock ticker like AAPL, MSFT, or GOOGL to test the news feature.")
+                    else:
+                        st.warning(f"⚠️ Unable to fetch news for {ticker}.")
+                        st.info("💡 News data may not be available for this stock. This could be due to:\n"
+                              "- Limited coverage from news sources\n"
+                              "- Newly listed stock\n"
+                              "- Data source limitations")
                 except Exception as e:
                     st.error(f"Error fetching news: {str(e)}")
                     st.info("💡 News data may be temporarily unavailable. Please try again later.")

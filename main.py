@@ -41,33 +41,27 @@ with col1:
     <div class="info-card">
         <h3 style='color: white;'>📊 Single Analysis</h3>
         <p style='color: white;'>Deep dive into individual stocks with comprehensive metrics, charts, and scoring</p>
+        <p style='color: #ccc; font-size: 0.9rem; margin-top: 0.5rem;'>💡 Use the sidebar to navigate to "📊 Single Analysis"</p>
     </div>
     """, unsafe_allow_html=True)
-    
-    if st.button("Go to Single Analysis →", use_container_width=True, key="dashboard_single"):
-        st.switch_page("pages/1_Single_Analysis.py")
 
 with col2:
     st.markdown("""
     <div class="success-card">
         <h3 style='color: white;'>📈 Batch Comparison</h3>
         <p style='color: white;'>Compare multiple stocks side-by-side to identify the best opportunities</p>
+        <p style='color: #ccc; font-size: 0.9rem; margin-top: 0.5rem;'>💡 Use the sidebar to navigate to "📈 Batch Comparison"</p>
     </div>
     """, unsafe_allow_html=True)
-    
-    if st.button("Go to Batch Comparison →", use_container_width=True, key="dashboard_batch"):
-        st.switch_page("pages/2_Batch_Comparison.py")
 
 with col3:
     st.markdown("""
     <div class="warning-card">
         <h3 style='color: white;'>🔍 Stock Screener</h3>
         <p style='color: white;'>Filter stocks by custom criteria to find investment opportunities</p>
+        <p style='color: #ccc; font-size: 0.9rem; margin-top: 0.5rem;'>💡 Use the sidebar to navigate to "🔍 Stock Screener"</p>
     </div>
     """, unsafe_allow_html=True)
-    
-    if st.button("Go to Stock Screener →", use_container_width=True, key="dashboard_screener"):
-        st.switch_page("pages/3_Stock_Screener.py")
 
 # Reports section
 st.markdown("---")
@@ -79,11 +73,9 @@ with col_report:
     <div class="warning-card">
         <h3 style='color: white;'>📄 Reports</h3>
         <p style='color: white;'>Generate professional PDF reports</p>
+        <p style='color: #ccc; font-size: 0.9rem; margin-top: 0.5rem;'>💡 Use the sidebar to navigate to "📄 Reports"</p>
     </div>
     """, unsafe_allow_html=True)
-    
-    if st.button("Go to Reports →", use_container_width=True, key="dashboard_reports"):
-        st.switch_page("pages/4_Reports.py")
 
 st.markdown("---")
 

@@ -9,6 +9,8 @@ import numpy as np
 import warnings
 import requests
 import time
+import random
+import os
 warnings.filterwarnings('ignore')
 
 # Monkey-patch yfinance's base session to always use proper headers
@@ -50,12 +52,26 @@ def _patched_request(self, method, url, **kwargs):
 requests.Session.get = _patched_get
 requests.Session.request = _patched_request
 
+# Rotating user agents to avoid detection
+_USER_AGENTS = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0',
+]
+
+def _get_random_user_agent():
+    """Get a random user agent"""
+    return random.choice(_USER_AGENTS)
+
 # Configure yfinance globally to use proper headers
 def _create_yfinance_session():
     """Create a session with proper headers for yfinance"""
     session = requests.Session()
     session.headers.update({
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'User-Agent': _get_random_user_agent(),
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.9',
         'Accept-Encoding': 'gzip, deflate, br',
@@ -65,6 +81,8 @@ def _create_yfinance_session():
         'Sec-Fetch-Mode': 'navigate',
         'Sec-Fetch-Site': 'none',
         'Cache-Control': 'max-age=0',
+        'DNT': '1',
+        'Referer': 'https://finance.yahoo.com/',
     })
     return session
 
@@ -87,20 +105,30 @@ class StockAnalyzer:
         
         for attempt in range(max_retries):
             try:
+                # Refresh session every few attempts to rotate user agent
+                if attempt > 0 and attempt % 2 == 0:
+                    self._refresh_session()
+                    # Longer delay on retry
+                    time.sleep(random.uniform(2, 5))
+                
                 # Method 1: Try yf.download first (often more reliable than Ticker.history)
                 hist = None
-                periods_to_try = [period, "6mo", "3mo", "1mo", "5d"]
+                periods_to_try = [period, "6mo", "3mo", "1mo", "5d", "1d"]
                 
                 for try_period in periods_to_try:
                     try:
+                        # Small random delay to avoid detection
+                        time.sleep(random.uniform(0.5, 1.5))
+                        
                         # Use yf.download with session (more reliable)
                         hist_download = yf.download(
                             ticker, 
                             period=try_period, 
                             progress=False, 
                             session=self.session, 
-                            timeout=30,
-                            show_errors=False
+                            timeout=60,  # Increased timeout
+                            show_errors=False,
+                            threads=False  # Single-threaded to avoid detection
                         )
                         
                         if hist_download is not None and len(hist_download) > 0:
@@ -149,9 +177,14 @@ class StockAnalyzer:
                 # If all periods failed, wait and retry on next attempt
                 if hist is None or len(hist) == 0:
                     if attempt < max_retries - 1:
-                        # Exponential backoff: wait longer on each retry
-                        wait_time = (attempt + 1) * 2
+                        # Exponential backoff with jitter: wait longer on each retry
+                        base_wait = (attempt + 1) * 3
+                        jitter = random.uniform(1, 3)
+                        wait_time = base_wait + jitter
+                        print(f"Retry {attempt + 1}/{max_retries} for {ticker} after {wait_time:.1f}s", file=__import__('sys').stderr)
                         time.sleep(wait_time)
+                        # Refresh session for next attempt
+                        self._refresh_session()
                         continue
                     
                     # Last attempt failed - try to get at least some data

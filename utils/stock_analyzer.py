@@ -17,51 +17,122 @@ class StockAnalyzer:
         self.cache = {}
     
     def get_stock_data(self, ticker, period="1y"):
-        """Fetch comprehensive stock data with caching"""
-        try:
-            # Use yfinance with better error handling for cloud environments
-            # yfinance handles user-agent internally, but we add timeout
-            stock = yf.Ticker(ticker)
-            
-            # Try to fetch data with timeout and proper error handling
-            hist = stock.history(period=period, timeout=30)
-            
-            # Check if we got valid data
-            if hist is None or len(hist) == 0:
-                return None
-            
-            # Fetch additional data with error handling
+        """Fetch comprehensive stock data with caching and improved error handling"""
+        import time
+        
+        # Clean ticker symbol
+        ticker = str(ticker).upper().strip()
+        
+        # Try multiple times with retry logic for cloud environments
+        max_retries = 3
+        for attempt in range(max_retries):
             try:
-                info = stock.info
-            except:
+                # Use yfinance with better error handling for cloud environments
+                stock = yf.Ticker(ticker)
+                
+                # Try to fetch history data with timeout
+                try:
+                    hist = stock.history(period=period, timeout=30)
+                except Exception as hist_error:
+                    # If history fails, try shorter period
+                    try:
+                        hist = stock.history(period="6mo", timeout=30)
+                    except:
+                        try:
+                            hist = stock.history(period="3mo", timeout=30)
+                        except:
+                            hist = None
+                
+                # Check if we got valid data
+                if hist is None or len(hist) == 0:
+                    if attempt < max_retries - 1:
+                        time.sleep(1)  # Wait before retry
+                        continue
+                    # Last attempt failed - try to get at least some data
+                    # Sometimes info works even if history doesn't
+                    try:
+                        info = stock.info
+                        if info and len(info) > 0:
+                            # Create minimal history from current price
+                            current_price = info.get('currentPrice') or info.get('regularMarketPrice') or 0
+                            if current_price > 0:
+                                # Create a minimal DataFrame with current price
+                                dates = pd.date_range(end=pd.Timestamp.now(), periods=1, freq='D')
+                                hist = pd.DataFrame({
+                                    'Open': [current_price],
+                                    'High': [current_price],
+                                    'Low': [current_price],
+                                    'Close': [current_price],
+                                    'Volume': [info.get('volume', 0)]
+                                }, index=dates)
+                            else:
+                                return None
+                        else:
+                            return None
+                    except:
+                        return None
+                
+                # Fetch additional data with error handling
                 info = {}
-            
-            try:
-                financials = stock.financials
-            except:
+                try:
+                    info = stock.info
+                    # Validate info is not empty
+                    if not info or len(info) == 0:
+                        info = {}
+                except Exception as e:
+                    info = {}
+                
                 financials = pd.DataFrame()
-            
-            try:
-                balance_sheet = stock.balance_sheet
-            except:
+                try:
+                    financials = stock.financials
+                    if financials is None:
+                        financials = pd.DataFrame()
+                except:
+                    financials = pd.DataFrame()
+                
                 balance_sheet = pd.DataFrame()
-            
-            try:
-                cash_flow = stock.cashflow
-            except:
+                try:
+                    balance_sheet = stock.balance_sheet
+                    if balance_sheet is None:
+                        balance_sheet = pd.DataFrame()
+                except:
+                    balance_sheet = pd.DataFrame()
+                
                 cash_flow = pd.DataFrame()
-            
-            return {
-                'ticker': ticker,
-                'history': hist,
-                'info': info,
-                'financials': financials,
-                'balance_sheet': balance_sheet,
-                'cash_flow': cash_flow,
-                'stock_object': stock
-            }
-        except Exception as e:
-            return None
+                try:
+                    cash_flow = stock.cashflow
+                    if cash_flow is None:
+                        cash_flow = pd.DataFrame()
+                except:
+                    cash_flow = pd.DataFrame()
+                
+                # Validate we have at least history data
+                if hist is not None and len(hist) > 0:
+                    return {
+                        'ticker': ticker,
+                        'history': hist,
+                        'info': info,
+                        'financials': financials,
+                        'balance_sheet': balance_sheet,
+                        'cash_flow': cash_flow,
+                        'stock_object': stock
+                    }
+                else:
+                    if attempt < max_retries - 1:
+                        time.sleep(1)
+                        continue
+                    return None
+                    
+            except Exception as e:
+                # Log error for debugging (in production, you might want to use logging)
+                error_msg = str(e)
+                if attempt < max_retries - 1:
+                    time.sleep(1)
+                    continue
+                # Last attempt failed
+                return None
+        
+        return None
     
     def calculate_score(self, data):
         """Calculate comprehensive stock score (0-100)"""

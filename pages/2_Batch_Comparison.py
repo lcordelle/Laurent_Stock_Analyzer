@@ -81,6 +81,7 @@ if compare_btn and tickers_input:
         tickers = tickers[:10]
     
     stocks_data = {}
+    failed_tickers = []
     
     progress_bar = st.progress(0)
     status_text = st.empty()
@@ -88,12 +89,26 @@ if compare_btn and tickers_input:
     for i, ticker in enumerate(tickers):
         status_text.text(f"Fetching data for {ticker}...")
         data = analyzer.get_stock_data(ticker, period=time_period)
-        if data:
+        if data and data.get('history') is not None and len(data.get('history', [])) > 0:
             stocks_data[ticker] = data
+        else:
+            failed_tickers.append(ticker)
         progress_bar.progress((i + 1) / len(tickers))
+        # Small delay to avoid rate limiting
+        import time
+        time.sleep(0.5)
     
     status_text.empty()
     progress_bar.empty()
+    
+    # Show failed tickers if any
+    if failed_tickers:
+        st.warning(f"⚠️ Could not fetch data for: {', '.join(failed_tickers)}")
+        st.info("💡 **Troubleshooting tips:**\n"
+                "- Verify ticker symbols are correct (e.g., AAPL not APPL)\n"
+                "- Some stocks may have limited data availability\n"
+                "- Try again in a few moments (Yahoo Finance may be rate limiting)\n"
+                "- Check that stocks are listed on major exchanges")
     
     if stocks_data:
         # Calculate technical indicators and analysis for all stocks

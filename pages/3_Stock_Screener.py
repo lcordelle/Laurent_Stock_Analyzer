@@ -107,6 +107,7 @@ with tab_screener:
         tickers = [t.strip().upper() for t in stock_universe.split(',')]
         
         passed_stocks_analysis = {}
+        failed_tickers = []
         
         progress_bar = st.progress(0)
         status_text = st.empty()
@@ -115,7 +116,7 @@ with tab_screener:
             status_text.text(f"Screening {ticker}...")
             data = analyzer.get_stock_data(ticker, period="1y")
             
-            if data:
+            if data and data.get('history') is not None and len(data.get('history', [])) > 0:
                 metrics = analyzer.get_key_metrics(data)
                 
                 # Apply filters
@@ -148,11 +149,25 @@ with tab_screener:
                         'score': score,
                         'forecast': forecast
                     }
+            else:
+                failed_tickers.append(ticker)
             
             progress_bar.progress((i + 1) / len(tickers))
+            # Small delay to avoid rate limiting
+            import time
+            time.sleep(0.5)
         
         status_text.empty()
         progress_bar.empty()
+        
+        # Show failed tickers if any
+        if failed_tickers:
+            st.warning(f"⚠️ Could not fetch data for: {', '.join(failed_tickers)}")
+            st.info("💡 **Troubleshooting tips:**\n"
+                   "- Verify ticker symbols are correct (e.g., AAPL not APPL)\n"
+                   "- Some stocks may have limited data availability\n"
+                   "- Try again in a few moments (Yahoo Finance may be rate limiting)\n"
+                   "- Check that stocks are listed on major exchanges")
         
         if passed_stocks_analysis:
             st.success(f"✅ Found {len(passed_stocks_analysis)} stocks matching criteria")

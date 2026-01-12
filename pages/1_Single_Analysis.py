@@ -75,7 +75,7 @@ if analyze_btn and ticker:
     with st.spinner(f"Analyzing {ticker}..."):
         data = analyzer.get_stock_data(ticker, period=time_period)
         
-        if data:
+        if data and data.get('history') is not None and len(data.get('history', [])) > 0:
             # Calculate metrics and score
             metrics = analyzer.get_key_metrics(data)
             score = analyzer.calculate_score(data)
@@ -1394,5 +1394,25 @@ if analyze_btn and ticker:
                     st.error(f"Error fetching news: {str(e)}")
                     st.info("💡 News data may be temporarily unavailable. Please try again later.")
         else:
-            st.error(f"Error fetching data for {ticker}. Please check the ticker symbol and try again.")
+            st.error(f"❌ Error fetching data for {ticker}")
+            st.markdown("""
+            <div style="background-color: #fff3cd; padding: 20px; border-radius: 8px; border-left: 5px solid #ffc107; margin: 15px 0;">
+                <h4 style="margin: 0 0 10px 0; color: #856404;">🔍 Troubleshooting Guide</h4>
+                <ul style="margin: 0; padding-left: 20px; color: #856404;">
+                    <li><b>Check ticker symbol:</b> Make sure it's correct (e.g., AAPL not APPL, MSFT not MFT)</li>
+                    <li><b>Verify stock exists:</b> Stock must be listed on a major exchange (NYSE, NASDAQ)</li>
+                    <li><b>Network issues:</b> Yahoo Finance may be temporarily unavailable - try again in a moment</li>
+                    <li><b>Rate limiting:</b> Too many requests - wait 30 seconds and try again</li>
+                    <li><b>Try common tickers:</b> AAPL, MSFT, GOOGL, NVDA, TSLA usually work</li>
+                </ul>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.info("💡 **Common working tickers to test:**\n"
+                   "- **AAPL** (Apple)\n"
+                   "- **MSFT** (Microsoft)\n"
+                   "- **GOOGL** (Google)\n"
+                   "- **NVDA** (NVIDIA)\n"
+                   "- **TSLA** (Tesla)\n"
+                   "- **AMZN** (Amazon)")
 

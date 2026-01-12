@@ -11,21 +11,34 @@ import requests
 import time
 warnings.filterwarnings('ignore')
 
+# Configure yfinance globally to use proper headers
+def _create_yfinance_session():
+    """Create a session with proper headers for yfinance"""
+    session = requests.Session()
+    session.headers.update({
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Cache-Control': 'max-age=0',
+    })
+    return session
+
+# Set default session for yfinance
+_yf_session = _create_yfinance_session()
+
 class StockAnalyzer:
     """Advanced Stock Analysis Engine"""
     
     def __init__(self):
         self.cache = {}
         # Create a session with proper headers to avoid Yahoo Finance blocking
-        self.session = requests.Session()
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'Accept-Encoding': 'gzip, deflate',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1',
-        })
+        self.session = _create_yfinance_session()
     
     def get_stock_data(self, ticker, period="1y"):
         """Fetch comprehensive stock data with caching and improved error handling"""
@@ -37,20 +50,36 @@ class StockAnalyzer:
         for attempt in range(max_retries):
             try:
                 # Use yfinance with custom session to avoid blocking
+                # Try multiple approaches to ensure session is used
                 stock = yf.Ticker(ticker, session=self.session)
                 
-                # Try to fetch history data with timeout and retry
+                # Also try using yf.download as fallback (sometimes works better)
                 hist = None
                 periods_to_try = [period, "6mo", "3mo", "1mo"]
                 
                 for try_period in periods_to_try:
                     try:
+                        # Method 1: Use stock.history with session
                         hist = stock.history(period=try_period, timeout=30)
                         if hist is not None and len(hist) > 0:
                             break
-                    except Exception as hist_error:
-                        # Log the error but continue trying
-                        continue
+                    except Exception:
+                        try:
+                            # Method 2: Use yf.download as fallback (sometimes more reliable)
+                            hist_download = yf.download(ticker, period=try_period, progress=False, session=self.session, timeout=30)
+                            if hist_download is not None and len(hist_download) > 0:
+                                # yf.download returns DataFrame with OHLCV columns
+                                # If multi-index (multiple tickers), get first ticker
+                                if isinstance(hist_download.columns, pd.MultiIndex):
+                                    # Get first ticker's data
+                                    first_ticker = hist_download.columns.levels[1][0]
+                                    hist = hist_download.xs(first_ticker, axis=1, level=1)
+                                else:
+                                    hist = hist_download
+                                if hist is not None and len(hist) > 0:
+                                    break
+                        except Exception:
+                            continue
                 
                 # If all periods failed, wait and retry on next attempt
                 if hist is None or len(hist) == 0:

@@ -83,39 +83,68 @@ class StockAnalyzer:
         
         # Try multiple times with retry logic for cloud environments
         max_retries = 3
+        last_error = None
+        
         for attempt in range(max_retries):
             try:
-                # Use yfinance with custom session to avoid blocking
-                # Try multiple approaches to ensure session is used
-                stock = yf.Ticker(ticker, session=self.session)
-                
-                # Also try using yf.download as fallback (sometimes works better)
+                # Method 1: Try yf.download first (often more reliable than Ticker.history)
                 hist = None
-                periods_to_try = [period, "6mo", "3mo", "1mo"]
+                periods_to_try = [period, "6mo", "3mo", "1mo", "5d"]
                 
                 for try_period in periods_to_try:
                     try:
-                        # Method 1: Use stock.history with session
-                        hist = stock.history(period=try_period, timeout=30)
-                        if hist is not None and len(hist) > 0:
-                            break
-                    except Exception:
-                        try:
-                            # Method 2: Use yf.download as fallback (sometimes more reliable)
-                            hist_download = yf.download(ticker, period=try_period, progress=False, session=self.session, timeout=30)
-                            if hist_download is not None and len(hist_download) > 0:
-                                # yf.download returns DataFrame with OHLCV columns
-                                # If multi-index (multiple tickers), get first ticker
-                                if isinstance(hist_download.columns, pd.MultiIndex):
-                                    # Get first ticker's data
-                                    first_ticker = hist_download.columns.levels[1][0]
-                                    hist = hist_download.xs(first_ticker, axis=1, level=1)
+                        # Use yf.download with session (more reliable)
+                        hist_download = yf.download(
+                            ticker, 
+                            period=try_period, 
+                            progress=False, 
+                            session=self.session, 
+                            timeout=30,
+                            show_errors=False
+                        )
+                        
+                        if hist_download is not None and len(hist_download) > 0:
+                            # yf.download returns DataFrame with OHLCV columns
+                            # If multi-index (multiple tickers), get first ticker
+                            if isinstance(hist_download.columns, pd.MultiIndex):
+                                # Get first ticker's data
+                                first_ticker = hist_download.columns.levels[1][0]
+                                hist = hist_download.xs(first_ticker, axis=1, level=1)
+                            else:
+                                hist = hist_download
+                            
+                            # Ensure we have required columns
+                            if hist is not None and len(hist) > 0:
+                                required_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
+                                if all(col in hist.columns for col in required_cols):
+                                    break
                                 else:
-                                    hist = hist_download
+                                    # Create missing columns from Close
+                                    for col in required_cols:
+                                        if col not in hist.columns:
+                                            if col == 'Volume':
+                                                hist[col] = 0
+                                            else:
+                                                hist[col] = hist.get('Close', hist.iloc[:, 0])
+                                    break
+                    except Exception as e:
+                        last_error = str(e)
+                        continue
+                
+                # Method 2: If download failed, try Ticker.history
+                if hist is None or len(hist) == 0:
+                    try:
+                        stock = yf.Ticker(ticker, session=self.session)
+                        for try_period in periods_to_try:
+                            try:
+                                hist = stock.history(period=try_period, timeout=30)
                                 if hist is not None and len(hist) > 0:
                                     break
-                        except Exception:
-                            continue
+                            except Exception as e:
+                                last_error = str(e)
+                                continue
+                    except Exception as e:
+                        last_error = str(e)
                 
                 # If all periods failed, wait and retry on next attempt
                 if hist is None or len(hist) == 0:
@@ -201,14 +230,21 @@ class StockAnalyzer:
                     return None
                     
             except Exception as e:
-                # Log error for debugging (in production, you might want to use logging)
-                error_msg = str(e)
+                # Log error for debugging
+                last_error = str(e)
                 if attempt < max_retries - 1:
-                    time.sleep(1)
+                    # Exponential backoff
+                    wait_time = (attempt + 1) * 2
+                    time.sleep(wait_time)
                     continue
                 # Last attempt failed
+                # Print error for debugging (will show in Render logs)
+                print(f"Failed to get ticker '{ticker}' reason: {last_error}", file=__import__('sys').stderr)
                 return None
         
+        # If we got here, all retries failed
+        if last_error:
+            print(f"Failed to get ticker '{ticker}' reason: {last_error}", file=__import__('sys').stderr)
         return None
     
     def calculate_score(self, data):

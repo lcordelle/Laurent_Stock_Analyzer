@@ -7,6 +7,7 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import warnings
+import requests
 warnings.filterwarnings('ignore')
 
 class StockAnalyzer:
@@ -18,12 +19,37 @@ class StockAnalyzer:
     def get_stock_data(self, ticker, period="1y"):
         """Fetch comprehensive stock data with caching"""
         try:
+            # Use yfinance with better error handling for cloud environments
+            # yfinance handles user-agent internally, but we add timeout
             stock = yf.Ticker(ticker)
-            hist = stock.history(period=period)
-            info = stock.info
-            financials = stock.financials
-            balance_sheet = stock.balance_sheet
-            cash_flow = stock.cashflow
+            
+            # Try to fetch data with timeout and proper error handling
+            hist = stock.history(period=period, timeout=30)
+            
+            # Check if we got valid data
+            if hist is None or len(hist) == 0:
+                return None
+            
+            # Fetch additional data with error handling
+            try:
+                info = stock.info
+            except:
+                info = {}
+            
+            try:
+                financials = stock.financials
+            except:
+                financials = pd.DataFrame()
+            
+            try:
+                balance_sheet = stock.balance_sheet
+            except:
+                balance_sheet = pd.DataFrame()
+            
+            try:
+                cash_flow = stock.cashflow
+            except:
+                cash_flow = pd.DataFrame()
             
             return {
                 'ticker': ticker,

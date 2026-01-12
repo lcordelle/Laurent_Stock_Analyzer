@@ -13,6 +13,13 @@ import random
 import os
 warnings.filterwarnings('ignore')
 
+# Import Alpha Vantage client
+try:
+    from utils.alpha_vantage_client import AlphaVantageClient
+    ALPHA_VANTAGE_AVAILABLE = True
+except ImportError:
+    ALPHA_VANTAGE_AVAILABLE = False
+
 # Monkey-patch yfinance's base session to always use proper headers
 # This ensures ALL yfinance requests use our headers, even if session parameter is ignored
 _original_get = requests.Session.get
@@ -96,6 +103,16 @@ class StockAnalyzer:
         # Track last request time to avoid rate limiting
         self.last_request_time = 0
         self.min_request_interval = 1.5  # Minimum seconds between requests
+        
+        # Initialize Alpha Vantage client if available
+        self.alpha_vantage = None
+        if ALPHA_VANTAGE_AVAILABLE:
+            try:
+                api_key = os.environ.get('ALPHA_VANTAGE_API_KEY', '0SD4K06XAEF1P5DI')
+                self.alpha_vantage = AlphaVantageClient(api_key=api_key)
+                print("Alpha Vantage client initialized", file=__import__('sys').stderr)
+            except Exception as e:
+                print(f"Failed to initialize Alpha Vantage: {e}", file=__import__('sys').stderr)
     
     def _rate_limit(self):
         """Enforce rate limiting between requests"""
@@ -123,6 +140,24 @@ class StockAnalyzer:
             if time.time() - cached_data.get('timestamp', 0) < 300:
                 return cached_data.get('data')
         
+        # Try Alpha Vantage first (primary source)
+        if self.alpha_vantage:
+            try:
+                print(f"Trying Alpha Vantage for {ticker}...", file=__import__('sys').stderr)
+                data = self.alpha_vantage.get_stock_data(ticker, period)
+                if data and data.get('history') is not None and len(data.get('history', [])) > 0:
+                    # Cache the result
+                    self.cache[cache_key] = {
+                        'data': data,
+                        'timestamp': time.time()
+                    }
+                    print(f"Successfully fetched {ticker} from Alpha Vantage", file=__import__('sys').stderr)
+                    return data
+            except Exception as e:
+                print(f"Alpha Vantage failed for {ticker}: {str(e)}", file=__import__('sys').stderr)
+                # Fall through to Yahoo Finance
+        
+        # Fallback to Yahoo Finance (for local users or if Alpha Vantage fails)
         # Enforce rate limiting
         self._rate_limit()
         

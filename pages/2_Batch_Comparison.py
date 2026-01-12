@@ -87,12 +87,16 @@ if compare_btn and tickers_input:
     status_text = st.empty()
     
     for i, ticker in enumerate(tickers):
-        status_text.text(f"Fetching data for {ticker}...")
-        data = analyzer.get_stock_data(ticker, period=time_period)
-        if data and data.get('history') is not None and len(data.get('history', [])) > 0:
-            stocks_data[ticker] = data
-        else:
+        status_text.text(f"Fetching data for {ticker}... (max 15s per ticker)")
+        try:
+            data = analyzer.get_stock_data(ticker, period=time_period)
+            if data and data.get('history') is not None and len(data.get('history', [])) > 0:
+                stocks_data[ticker] = data
+            else:
+                failed_tickers.append(ticker)
+        except Exception as e:
             failed_tickers.append(ticker)
+            print(f"Error fetching {ticker}: {e}", file=__import__('sys').stderr)
         progress_bar.progress((i + 1) / len(tickers))
         # Small delay to avoid rate limiting
         import time
@@ -103,12 +107,23 @@ if compare_btn and tickers_input:
     
     # Show failed tickers if any
     if failed_tickers:
-        st.warning(f"⚠️ Could not fetch data for: {', '.join(failed_tickers)}")
-        st.info("💡 **Troubleshooting tips:**\n"
-                "- Verify ticker symbols are correct (e.g., AAPL not APPL)\n"
-                "- Some stocks may have limited data availability\n"
-                "- Try again in a few moments (Yahoo Finance may be rate limiting)\n"
-                "- Check that stocks are listed on major exchanges")
+        st.error(f"❌ Could not fetch data for: {', '.join(failed_tickers)}")
+        st.warning("""
+        ⚠️ **Yahoo Finance appears to be blocking requests from Render's servers.**
+        
+        **This is a known issue with cloud hosting platforms.**
+        
+        **Options:**
+        1. **Run locally** - The app works perfectly when run on your Mac/iPad via local network
+        2. **Wait and retry** - Sometimes Yahoo Finance temporarily blocks, try again later
+        3. **Use alternative data source** - We can add Alpha Vantage or IEX Cloud as fallback
+        
+        **To run locally:**
+        ```bash
+        streamlit run main.py
+        ```
+        Then access at `http://localhost:8501` from your Mac or iPad (same network)
+        """)
     
     if stocks_data:
         # Calculate technical indicators and analysis for all stocks

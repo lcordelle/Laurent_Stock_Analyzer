@@ -126,34 +126,47 @@ class StockAnalyzer:
         # Enforce rate limiting
         self._rate_limit()
         
+        # Quick timeout to prevent hanging forever
+        overall_start_time = time.time()
+        max_total_time = 15  # Maximum 15 seconds total
+        
         # Try multiple times with retry logic for cloud environments
-        max_retries = 5  # Increased retries
+        max_retries = 2  # Reduced retries for faster failure
         last_error = None
         
         for attempt in range(max_retries):
+            # Check if we've exceeded total time limit
+            if time.time() - overall_start_time > max_total_time:
+                print(f"Timeout: Exceeded {max_total_time}s for {ticker}", file=__import__('sys').stderr)
+                return None
+            
             try:
                 # Refresh session every few attempts to rotate user agent
-                if attempt > 0 and attempt % 2 == 0:
+                if attempt > 0:
                     self._refresh_session()
-                    # Longer delay on retry
-                    time.sleep(random.uniform(2, 5))
+                    # Shorter delay on retry
+                    time.sleep(random.uniform(1, 2))
                 
                 # Method 1: Try yf.download first (often more reliable than Ticker.history)
                 hist = None
-                periods_to_try = [period, "6mo", "3mo", "1mo", "5d", "1d"]
+                periods_to_try = ["1mo", "5d", "1d"]  # Start with shorter periods for faster response
                 
                 for try_period in periods_to_try:
+                    # Check timeout before each attempt
+                    if time.time() - overall_start_time > max_total_time:
+                        break
+                    
                     try:
-                        # Small random delay to avoid detection
-                        time.sleep(random.uniform(0.5, 1.5))
+                        # Shorter delay
+                        time.sleep(random.uniform(0.3, 0.8))
                         
-                        # Use yf.download with session (more reliable)
+                        # Use yf.download with shorter timeout
                         hist_download = yf.download(
                             ticker, 
                             period=try_period, 
                             progress=False, 
                             session=self.session, 
-                            timeout=60,  # Increased timeout
+                            timeout=10,  # Reduced timeout for faster failure
                             show_errors=False,
                             threads=False  # Single-threaded to avoid detection
                         )
@@ -186,33 +199,38 @@ class StockAnalyzer:
                         last_error = str(e)
                         continue
                 
-                # Method 2: If download failed, try Ticker.history
+                # Method 2: If download failed, try Ticker.history (with timeout check)
                 if hist is None or len(hist) == 0:
-                    try:
-                        stock = yf.Ticker(ticker, session=self.session)
-                        for try_period in periods_to_try:
-                            try:
-                                hist = stock.history(period=try_period, timeout=30)
-                                if hist is not None and len(hist) > 0:
+                    if time.time() - overall_start_time < max_total_time:
+                        try:
+                            stock = yf.Ticker(ticker, session=self.session)
+                            for try_period in periods_to_try:
+                                if time.time() - overall_start_time > max_total_time:
                                     break
-                            except Exception as e:
-                                last_error = str(e)
-                                continue
-                    except Exception as e:
-                        last_error = str(e)
+                                try:
+                                    hist = stock.history(period=try_period, timeout=10)
+                                    if hist is not None and len(hist) > 0:
+                                        break
+                                except Exception as e:
+                                    last_error = str(e)
+                                    continue
+                        except Exception as e:
+                            last_error = str(e)
                 
-                # If all periods failed, wait and retry on next attempt
+                # If all periods failed, fail fast (don't wait long)
                 if hist is None or len(hist) == 0:
                     if attempt < max_retries - 1:
-                        # Exponential backoff with jitter: wait longer on each retry
-                        base_wait = (attempt + 1) * 3
-                        jitter = random.uniform(1, 3)
-                        wait_time = base_wait + jitter
-                        print(f"Retry {attempt + 1}/{max_retries} for {ticker} after {wait_time:.1f}s", file=__import__('sys').stderr)
+                        # Short wait before retry
+                        wait_time = 2
+                        print(f"Retry {attempt + 1}/{max_retries} for {ticker}", file=__import__('sys').stderr)
                         time.sleep(wait_time)
                         # Refresh session for next attempt
                         self._refresh_session()
                         continue
+                    else:
+                        # Final attempt failed - return None quickly
+                        print(f"Failed to fetch {ticker} after {max_retries} attempts", file=__import__('sys').stderr)
+                        return None
                     
                     # Last attempt failed - try to get at least some data
                     # Sometimes info works even if history doesn't

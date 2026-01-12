@@ -65,8 +65,9 @@ echo ""
 echo "Press Ctrl+C to stop the application"
 echo ""
 
-# Launch Streamlit app
-streamlit run main.py
+# Launch Streamlit app with network access enabled
+# This allows access from iPad on same WiFi network
+streamlit run main.py --server.address 0.0.0.0 --server.port 8501
 
 # Cleanup on exit
 echo ""

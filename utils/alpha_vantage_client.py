@@ -253,48 +253,56 @@ class AlphaVantageClient:
     def get_stock_data(self, symbol, period='1y'):
         """Get comprehensive stock data (compatible with yfinance format)"""
         try:
-            # Get quote first for current price (faster)
-            quote = self.get_quote(symbol)
-            current_price = quote.get('currentPrice', 0) if quote else 0
-            
-            # Get historical data
+            # Get historical data first (most critical)
+            print(f"[Alpha Vantage] Fetching historical data for {symbol}...", file=__import__('sys').stderr)
             hist = self.get_historical_data(symbol, period)
             if hist is None or len(hist) == 0:
+                print(f"[Alpha Vantage] ❌ No historical data for {symbol}", file=__import__('sys').stderr)
                 return None
             
-            # Update current price from latest close if quote failed
-            if current_price == 0 and len(hist) > 0:
-                current_price = float(hist['Close'].iloc[-1])
+            print(f"[Alpha Vantage] ✅ Got {len(hist)} days of historical data for {symbol}", file=__import__('sys').stderr)
+            
+            # Get current price from latest close
+            current_price = float(hist['Close'].iloc[-1]) if len(hist) > 0 else 0
+            
+            # Try to get quote for more accurate current price (optional)
+            quote = {}
+            try:
+                print(f"[Alpha Vantage] Fetching quote for {symbol}...", file=__import__('sys').stderr)
+                quote = self.get_quote(symbol)
+                if quote and quote.get('currentPrice'):
+                    current_price = quote['currentPrice']
+                    print(f"[Alpha Vantage] ✅ Got quote for {symbol}: ${current_price:.2f}", file=__import__('sys').stderr)
+            except Exception as e:
+                print(f"[Alpha Vantage] ⚠️ Quote failed for {symbol}, using historical close: {str(e)}", file=__import__('sys').stderr)
             
             # Get company overview
-            overview = self.get_company_overview(symbol)
+            overview = {}
+            try:
+                print(f"[Alpha Vantage] Fetching company overview for {symbol}...", file=__import__('sys').stderr)
+                overview = self.get_company_overview(symbol)
+                print(f"[Alpha Vantage] ✅ Got company overview for {symbol}", file=__import__('sys').stderr)
+            except Exception as e:
+                print(f"[Alpha Vantage] ⚠️ Company overview failed for {symbol}: {str(e)}", file=__import__('sys').stderr)
+                # Create minimal overview
+                overview = {
+                    'symbol': symbol,
+                    'name': symbol,
+                    'currentPrice': current_price,
+                    'regularMarketPrice': current_price,
+                }
             
             # Update with current price
             overview['currentPrice'] = current_price
             overview['regularMarketPrice'] = current_price
             
-            # Get financial statements (optional - can be slow)
+            # Skip financial statements to avoid rate limits (not critical for basic analysis)
             financials = pd.DataFrame()
             balance_sheet = pd.DataFrame()
             cash_flow = pd.DataFrame()
             
-            try:
-                financials = self.get_income_statement(symbol)
-            except:
-                pass
-            
-            try:
-                balance_sheet = self.get_balance_sheet(symbol)
-            except:
-                pass
-            
-            try:
-                cash_flow = self.get_cash_flow(symbol)
-            except:
-                pass
-            
             # Return in yfinance-compatible format
-            return {
+            result = {
                 'ticker': symbol.upper(),
                 'history': hist,
                 'info': overview,
@@ -303,7 +311,13 @@ class AlphaVantageClient:
                 'cash_flow': cash_flow,
                 'stock_object': None  # Not needed for Alpha Vantage
             }
+            
+            print(f"[Alpha Vantage] ✅ Successfully built data structure for {symbol}", file=__import__('sys').stderr)
+            return result
         except Exception as e:
-            print(f"Alpha Vantage error for {symbol}: {str(e)}", file=__import__('sys').stderr)
+            error_msg = str(e)
+            print(f"[Alpha Vantage] ❌ Error for {symbol}: {error_msg}", file=__import__('sys').stderr)
+            import traceback
+            print(f"[Alpha Vantage] Traceback: {traceback.format_exc()}", file=__import__('sys').stderr)
             return None
 

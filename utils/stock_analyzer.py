@@ -151,10 +151,16 @@ class StockAnalyzer:
                         'data': data,
                         'timestamp': time.time()
                     }
-                    print(f"Successfully fetched {ticker} from Alpha Vantage", file=__import__('sys').stderr)
+                    print(f"✅ Successfully fetched {ticker} from Alpha Vantage ({len(data.get('history', []))} days)", file=__import__('sys').stderr)
                     return data
+                else:
+                    print(f"❌ Alpha Vantage returned empty data for {ticker}", file=__import__('sys').stderr)
             except Exception as e:
-                print(f"Alpha Vantage failed for {ticker}: {str(e)}", file=__import__('sys').stderr)
+                error_msg = str(e)
+                print(f"❌ Alpha Vantage failed for {ticker}: {error_msg}", file=__import__('sys').stderr)
+                # Check if it's a rate limit - if so, don't fall back immediately
+                if 'Rate Limit' in error_msg or 'Note' in error_msg:
+                    print(f"⚠️ Rate limited, will retry later or use Yahoo Finance fallback", file=__import__('sys').stderr)
                 # Fall through to Yahoo Finance
         
         # Fallback to Yahoo Finance (for local users or if Alpha Vantage fails)

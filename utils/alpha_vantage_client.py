@@ -46,13 +46,27 @@ class AlphaVantageClient:
             
             # Check for API errors
             if 'Error Message' in data:
-                raise Exception(f"Alpha Vantage Error: {data['Error Message']}")
+                error_msg = data['Error Message']
+                print(f"Alpha Vantage Error for {symbol} ({function}): {error_msg}", file=__import__('sys').stderr)
+                raise Exception(f"Alpha Vantage Error: {error_msg}")
             if 'Note' in data:
-                raise Exception(f"Alpha Vantage Rate Limit: {data['Note']}")
+                note = data['Note']
+                print(f"Alpha Vantage Rate Limit for {symbol} ({function}): {note}", file=__import__('sys').stderr)
+                raise Exception(f"Alpha Vantage Rate Limit: {note}")
+            
+            # Check if we got valid data
+            if not data or len(data) == 0:
+                print(f"Alpha Vantage empty response for {symbol} ({function})", file=__import__('sys').stderr)
+                raise Exception(f"Alpha Vantage empty response")
             
             return data
         except requests.exceptions.RequestException as e:
-            raise Exception(f"Alpha Vantage request failed: {str(e)}")
+            error_msg = f"Alpha Vantage request failed for {symbol} ({function}): {str(e)}"
+            print(error_msg, file=__import__('sys').stderr)
+            raise Exception(error_msg)
+        except Exception as e:
+            print(f"Alpha Vantage error for {symbol} ({function}): {str(e)}", file=__import__('sys').stderr)
+            raise
     
     def get_historical_data(self, symbol, period='1y'):
         """Get historical price data (OHLCV)"""

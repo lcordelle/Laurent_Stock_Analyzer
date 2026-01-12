@@ -1,0 +1,308 @@
+<!-- 
+    ZERO TRUST UI - QUICK FIXES
+    Copy-paste ready code snippets to improve your UI
+    
+    These are the most critical improvements based on the stock analyzer patterns
+-->
+
+<!-- ============================================ -->
+<!-- FIX 1: Add "What & Why" Intro to Step 1 -->
+<!-- ============================================ -->
+<!-- 
+    LOCATION: Add this RIGHT AFTER the step-header div in Step 1
+    BEFORE the "Platform Integration Info" section
+-->
+
+<div class="step-intro-box" style="background: linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%); border-left: 4px solid var(--primary-blue); padding: 24px; border-radius: 12px; margin: 24px 0; box-shadow: 0 2px 8px rgba(37, 99, 235, 0.1);">
+    <div style="display: flex; align-items: start; gap: 16px;">
+        <div style="font-size: 36px; line-height: 1;">💡</div>
+        <div style="flex: 1;">
+            <h3 style="color: var(--primary-blue); margin: 0 0 12px 0; font-size: 20px; font-weight: 600;">What We're Doing in This Step</h3>
+            <p style="color: #1E40AF; margin: 0 0 16px 0; line-height: 1.7; font-size: 15px;">
+                We're discovering your complete network topology by automatically pulling device inventory from your VirtualFusion Platform Graph Database. If you have High-Level Design (HLD) or Low-Level Design (LLD) documents, we'll also analyze those to extract additional network details.
+            </p>
+            
+            <div style="background: white; padding: 16px; border-radius: 8px; margin-bottom: 16px;">
+                <h4 style="color: var(--primary-blue); margin: 0 0 12px 0; font-size: 16px; font-weight: 600;">Why This Step is Important</h4>
+                <ul style="color: #1E40AF; margin: 0; padding-left: 20px; line-height: 2;">
+                    <li><strong>No Manual Entry:</strong> We automatically use data already in your platform - no duplicate work needed</li>
+                    <li><strong>Complete Picture:</strong> Graph Database shows all device relationships and network connections</li>
+                    <li><strong>Foundation for Zero Trust:</strong> We need to know your current network before designing the secure architecture</li>
+                    <li><strong>Time Savings:</strong> What would take days of manual discovery happens in minutes</li>
+                </ul>
+            </div>
+            
+            <div style="background: #F0FDF4; padding: 16px; border-radius: 8px; border-left: 3px solid #10B981;">
+                <div style="font-weight: 600; color: #065F46; margin-bottom: 8px; font-size: 14px;">✅ What Happens Automatically</div>
+                <div style="font-size: 13px; color: #047857; line-height: 1.8;">
+                    • Device inventory loaded from Graph DB<br>
+                    • Network relationships mapped<br>
+                    • Compliance data retrieved<br>
+                    • HLD/LLD documents processed (if uploaded)
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- ============================================ -->
+<!-- FIX 2: Add "What You Need to Do" Callout -->
+<!-- ============================================ -->
+<!-- 
+    LOCATION: Add this BEFORE the Graph Database Query section in Step 1
+    AFTER the intro box above
+-->
+
+<div class="action-callout" style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); color: white; padding: 24px; border-radius: 12px; margin: 24px 0; box-shadow: 0 4px 16px rgba(16, 185, 129, 0.3);">
+    <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 16px;">
+        <div style="font-size: 32px;">✅</div>
+        <h3 style="margin: 0; font-size: 20px; font-weight: 600;">What You Need to Do</h3>
+    </div>
+    <ol style="margin: 0; padding-left: 24px; line-height: 2.2; font-size: 15px;">
+        <li><strong>Review</strong> the network topology automatically loaded below (from your Graph Database)</li>
+        <li><strong>Upload</strong> any HLD/LLD documents you have (optional - helps us get more details)</li>
+        <li><strong>Select</strong> the compliance frameworks that apply to your organization</li>
+        <li><strong>Click</strong> "Start Bank Network Assessment" when you're ready to proceed</li>
+    </ol>
+    <div style="margin-top: 16px; padding: 12px; background: rgba(255, 255, 255, 0.2); border-radius: 8px; font-size: 13px;">
+        <strong>💡 Tip:</strong> Don't worry if you don't have HLD/LLD documents - we can work with the Graph Database data alone. Uploading documents just gives us more detail.
+    </div>
+</div>
+
+
+<!-- ============================================ -->
+<!-- FIX 3: Enhanced Tool Card (NMAP Example) -->
+<!-- ============================================ -->
+<!-- 
+    LOCATION: Replace the existing NMAP tool card in Step 3 (Reconnaissance)
+    This shows the pattern - apply to all tools
+-->
+
+<div class="tool-card-enhanced" style="background: white; border: 2px solid #E2E8F0; border-radius: 12px; padding: 24px; margin-bottom: 20px; transition: all 0.3s ease;" onmouseover="this.style.borderColor='var(--primary-blue)'; this.style.boxShadow='0 4px 12px rgba(37, 99, 235, 0.15)'" onmouseout="this.style.borderColor='#E2E8F0'; this.style.boxShadow='none'">
+    <div style="display: flex; align-items: start; gap: 20px;">
+        <div style="font-size: 48px; line-height: 1;">🗺️</div>
+        <div style="flex: 1;">
+            <h4 style="margin: 0 0 8px 0; color: var(--dark-bg); font-size: 18px;">NMAP - Network Mapper</h4>
+            <p style="color: #64748B; margin: 0 0 16px 0; line-height: 1.7; font-size: 14px;">
+                <strong>What it does:</strong> Scans your network to discover all devices, open ports, and running services. Think of it as creating a detailed map of your network infrastructure.
+            </p>
+            <div style="background: #F0F9FF; padding: 16px; border-radius: 8px; border-left: 3px solid var(--primary-blue); margin-bottom: 12px;">
+                <div style="font-size: 13px; font-weight: 600; color: var(--primary-blue); margin-bottom: 8px;">Why we use it:</div>
+                <div style="font-size: 13px; color: #0C4A6E; line-height: 1.7;">
+                    We need to know exactly what's on your network before we can secure it. NMAP helps us identify:
+                    <ul style="margin: 8px 0 0 0; padding-left: 20px;">
+                        <li>Which ports are open (potential entry points for attackers)</li>
+                        <li>What services are running (what needs protection)</li>
+                        <li>Device types and operating systems (determines security requirements)</li>
+                        <li>Network topology (how devices are connected)</li>
+                    </ul>
+                </div>
+            </div>
+            <div style="display: flex; gap: 16px; font-size: 12px; color: #64748B;">
+                <div><strong>⏱️ Time:</strong> 2-5 minutes</div>
+                <div><strong>📊 Output:</strong> Port map, service inventory, device list</div>
+            </div>
+            <div id="nmapStatus" style="margin-top: 12px; padding: 8px 12px; background: #F8FAFC; border-radius: 6px; font-size: 12px; font-weight: 600; color: #64748B;">
+                Status: Pending
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- ============================================ -->
+<!-- FIX 4: Enhanced Status Box During Scans -->
+<!-- ============================================ -->
+<!-- 
+    LOCATION: Replace the existing scanning view in Step 3
+    Shows what's happening with clear explanations
+-->
+
+<div id="scanningView" style="display: none;">
+    <div class="status-box" style="background: white; border: 2px solid #10B981; border-radius: 12px; padding: 24px; margin: 20px 0;">
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+            <div class="spinner" style="width: 24px; height: 24px; border: 3px solid #10B981; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+            <div>
+                <div style="font-weight: 600; color: #065F46; font-size: 18px; margin-bottom: 4px;">🔄 Security Scan in Progress</div>
+                <div style="font-size: 14px; color: #047857;" id="currentToolStatus">Initializing scan tools...</div>
+            </div>
+        </div>
+        
+        <!-- Progress bar -->
+        <div style="background: #F1F5F9; height: 10px; border-radius: 5px; overflow: hidden; margin-bottom: 16px;">
+            <div id="scanProgressBar" style="background: linear-gradient(90deg, #10B981, #059669); height: 100%; width: 0%; transition: width 0.3s ease;"></div>
+        </div>
+        
+        <!-- What's happening explanation -->
+        <div style="background: #F0FDF4; padding: 16px; border-radius: 8px; border-left: 3px solid #10B981; margin-bottom: 16px;">
+            <div style="font-size: 14px; color: #065F46; line-height: 1.7;">
+                <strong>What's happening right now:</strong><br>
+                <span id="currentActionExplanation">NMAP is scanning your network to identify all active devices and open ports. This helps us understand your network's attack surface and what needs protection.</span>
+            </div>
+        </div>
+        
+        <!-- Next steps preview -->
+        <div style="padding: 12px; background: #EFF6FF; border-radius: 6px; font-size: 13px; color: #1E40AF;">
+            <strong>Next:</strong> After NMAP completes, we'll run vulnerability scanning (OpenVAS) to identify security weaknesses.
+        </div>
+    </div>
+
+    <!-- Tool status cards -->
+    <div class="grid grid-4" style="margin-top: 32px;">
+        <!-- Tool cards here - use enhanced pattern from Fix 3 -->
+    </div>
+</div>
+
+<style>
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+</style>
+
+
+<!-- ============================================ -->
+<!-- FIX 5: Simplified Step Header -->
+<!-- ============================================ -->
+<!-- 
+    LOCATION: Replace existing step headers
+    Makes them clearer and more user-friendly
+-->
+
+<!-- BEFORE (Current): -->
+<h2>📋 Step 1: Network Assessment & Topology Discovery</h2>
+<p>Leverage existing platform inventory from Graph DB and reverse engineer HLD/LLD documents</p>
+
+<!-- AFTER (Improved): -->
+<div class="step-header-enhanced" style="margin-bottom: 24px;">
+    <h2 style="margin: 0 0 8px 0; color: var(--dark-bg); font-size: 28px;">📋 Step 1: Network Assessment</h2>
+    <p style="margin: 0 0 12px 0; color: #64748B; font-size: 16px; line-height: 1.6;">
+        Discover your network topology using data from your platform Graph Database
+    </p>
+    <div style="background: #F0F9FF; padding: 12px; border-radius: 6px; border-left: 3px solid var(--primary-blue); font-size: 13px; color: #1E40AF;">
+        <strong>In this step:</strong> We'll automatically load your device inventory, analyze any design documents you provide, and create a complete picture of your current network architecture.
+    </div>
+</div>
+
+
+<!-- ============================================ -->
+<!-- FIX 6: Collapsible Info Sections -->
+<!-- ============================================ -->
+<!-- 
+    LOCATION: Wrap detailed technical sections
+    Allows users to see summary, expand for details
+-->
+
+<div class="info-section" style="margin-bottom: 20px;">
+    <button class="info-toggle" onclick="toggleSection('platformInfo')" style="width: 100%; text-align: left; background: #F8FAFC; border: 1px solid #E2E8F0; padding: 16px; border-radius: 8px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s;" onmouseover="this.style.background='#F1F5F9'" onmouseout="this.style.background='#F8FAFC'">
+        <span style="font-weight: 600; color: var(--dark-bg);">🔗 Platform Integration Details</span>
+        <span id="platformInfoToggle" style="color: var(--primary-blue); font-size: 18px;">▼</span>
+    </button>
+    <div id="platformInfo" style="display: none; background: white; padding: 20px; border: 1px solid #E2E8F0; border-top: none; border-radius: 0 0 8px 8px; animation: slideDown 0.3s ease;">
+        <!-- Detailed content here -->
+        <p style="color: #64748B; line-height: 1.7;">
+            <strong>Graph Database Integration:</strong> This Zero Trust module automatically pulls device inventory from your existing VirtualFusion AI Platform Graph Database. All customer device configurations collected by other platform features are reused here, eliminating duplicate data collection.
+        </p>
+        <p style="color: #64748B; line-height: 1.7; margin-top: 12px;">
+            <strong>HLD/LLD Reverse Engineering:</strong> The platform also reverse engineers High-Level Design (HLD) and Low-Level Design (LLD) documents to extract network topology, relationships, and architecture patterns.
+        </p>
+    </div>
+</div>
+
+<script>
+function toggleSection(sectionId) {
+    const section = document.getElementById(sectionId);
+    const toggle = document.getElementById(sectionId + 'Toggle');
+    
+    if (section.style.display === 'none' || section.style.display === '') {
+        section.style.display = 'block';
+        toggle.textContent = '▲';
+    } else {
+        section.style.display = 'none';
+        toggle.textContent = '▼';
+    }
+}
+</script>
+
+<style>
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+</style>
+
+
+<!-- ============================================ -->
+<!-- FIX 7: Enhanced "Why" Section Pattern -->
+<!-- ============================================ -->
+<!-- 
+    LOCATION: Improve existing "why-section" divs
+    Makes them more prominent and easier to read
+-->
+
+<!-- BEFORE (Current): -->
+<div class="why-section">
+    <h4>💡 Why We Build the Foundation First</h4>
+    <p><strong>Bank Network Transformation:</strong> We design the Zero Trust foundation BEFORE security analysis because:</p>
+    <ul>
+        <li><strong>Target State Definition:</strong> Establishes the "ideal" Zero Trust architecture...</li>
+    </ul>
+</div>
+
+<!-- AFTER (Improved): -->
+<div class="why-section-enhanced" style="background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%); border-left: 4px solid var(--warning-orange); padding: 24px; border-radius: 12px; margin: 24px 0; box-shadow: 0 2px 8px rgba(245, 158, 11, 0.15);">
+    <div style="display: flex; align-items: start; gap: 16px;">
+        <div style="font-size: 36px; line-height: 1;">💡</div>
+        <div style="flex: 1;">
+            <h3 style="color: #92400E; margin: 0 0 12px 0; font-size: 20px; font-weight: 600;">Why We Build the Foundation First</h3>
+            <p style="color: #78350F; margin: 0 0 16px 0; line-height: 1.7; font-size: 15px;">
+                <strong>Bank Network Transformation:</strong> We design the Zero Trust foundation BEFORE security analysis because it establishes the target state we're working toward.
+            </p>
+            <div style="background: white; padding: 16px; border-radius: 8px;">
+                <ul style="color: #78350F; margin: 0; padding-left: 20px; line-height: 2;">
+                    <li><strong>Target State Definition:</strong> Establishes the "ideal" Zero Trust architecture for your bank network based on NIST 800-207 and financial industry best practices</li>
+                    <li><strong>Bank Component Mapping:</strong> Maps core banking systems, branches, ATMs, and payment gateways to Zero Trust security zones</li>
+                    <li><strong>Gap Analysis Baseline:</strong> Provides the reference point against which we'll compare current bank network security posture</li>
+                    <li><strong>Compliance Alignment:</strong> Ensures the architecture meets PCI-DSS, SOX, Basel III, and other banking regulatory requirements</li>
+                    <li><strong>Risk-Based Prioritization:</strong> Helps prioritize remediation efforts based on financial impact and regulatory requirements</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- ============================================ -->
+<!-- SUMMARY: Implementation Checklist -->
+<!-- ============================================ -->
+<!--
+    PRIORITY ORDER:
+    
+    ✅ HIGH PRIORITY (Do First):
+    1. Add "What We're Doing" intro box to ALL 7 steps
+    2. Add "What You Need to Do" callout to steps that require user action
+    3. Simplify all step headers
+    4. Add collapsible sections for detailed technical info
+    
+    ✅ MEDIUM PRIORITY:
+    5. Enhance all tool cards with explanations (Step 3)
+    6. Add enhanced status boxes during scans/tests
+    7. Improve "Why" sections with better styling
+    
+    ✅ LOW PRIORITY (Polish):
+    8. Add tooltips for technical terms
+    9. Add "Learn More" expandable sections
+    10. Improve spacing and visual hierarchy throughout
+-->
+
+
+
+
+
+

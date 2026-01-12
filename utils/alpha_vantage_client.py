@@ -80,19 +80,29 @@ class AlphaVantageClient:
         df_data = []
         
         for date_str, values in time_series.items():
-            df_data.append({
-                'Date': pd.to_datetime(date_str),
-                'Open': float(values['1. open']),
-                'High': float(values['2. high']),
-                'Low': float(values['3. low']),
-                'Close': float(values['4. close']),
-                'Adj Close': float(values['5. adjusted close']),
-                'Volume': int(values['6. volume'])
-            })
+            try:
+                df_data.append({
+                    'Date': pd.to_datetime(date_str),
+                    'Open': float(values.get('1. open', 0)),
+                    'High': float(values.get('2. high', 0)),
+                    'Low': float(values.get('3. low', 0)),
+                    'Close': float(values.get('4. close', 0)),
+                    'Adj Close': float(values.get('5. adjusted close', values.get('4. close', 0))),
+                    'Volume': int(float(values.get('6. volume', 0)))
+                })
+            except (ValueError, KeyError) as e:
+                continue  # Skip invalid entries
+        
+        if not df_data:
+            return None
         
         df = pd.DataFrame(df_data)
         df.set_index('Date', inplace=True)
         df.sort_index(inplace=True)
+        
+        # Ensure we have at least some data
+        if len(df) == 0:
+            return None
         
         # Filter by period if needed
         if period in ['1d', '5d', '1mo']:
@@ -229,24 +239,45 @@ class AlphaVantageClient:
     def get_stock_data(self, symbol, period='1y'):
         """Get comprehensive stock data (compatible with yfinance format)"""
         try:
+            # Get quote first for current price (faster)
+            quote = self.get_quote(symbol)
+            current_price = quote.get('currentPrice', 0) if quote else 0
+            
             # Get historical data
             hist = self.get_historical_data(symbol, period)
             if hist is None or len(hist) == 0:
                 return None
             
+            # Update current price from latest close if quote failed
+            if current_price == 0 and len(hist) > 0:
+                current_price = float(hist['Close'].iloc[-1])
+            
             # Get company overview
             overview = self.get_company_overview(symbol)
             
-            # Get quote for current price
-            quote = self.get_quote(symbol)
-            if quote and quote.get('currentPrice'):
-                overview['currentPrice'] = quote['currentPrice']
-                overview['regularMarketPrice'] = quote['currentPrice']
+            # Update with current price
+            overview['currentPrice'] = current_price
+            overview['regularMarketPrice'] = current_price
             
-            # Get financial statements
-            financials = self.get_income_statement(symbol)
-            balance_sheet = self.get_balance_sheet(symbol)
-            cash_flow = self.get_cash_flow(symbol)
+            # Get financial statements (optional - can be slow)
+            financials = pd.DataFrame()
+            balance_sheet = pd.DataFrame()
+            cash_flow = pd.DataFrame()
+            
+            try:
+                financials = self.get_income_statement(symbol)
+            except:
+                pass
+            
+            try:
+                balance_sheet = self.get_balance_sheet(symbol)
+            except:
+                pass
+            
+            try:
+                cash_flow = self.get_cash_flow(symbol)
+            except:
+                pass
             
             # Return in yfinance-compatible format
             return {

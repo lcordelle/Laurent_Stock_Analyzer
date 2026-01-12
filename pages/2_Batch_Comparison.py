@@ -302,7 +302,7 @@ if compare_btn and tickers_input:
                                         </div>
                                         """, unsafe_allow_html=True)
                                 else:
-                                    st.info("📚 **No active BUY signals.** 💡 Wait for better entry opportunities.", unsafe_allow_html=True)
+                                    st.markdown("📚 **No active BUY signals.** 💡 Wait for better entry opportunities.", unsafe_allow_html=True)
                             
                             with col2:
                                 st.markdown("#### 🔴 SELL Signals - Educational Guide")
@@ -334,7 +334,7 @@ if compare_btn and tickers_input:
                                         </div>
                                         """, unsafe_allow_html=True)
                                 else:
-                                    st.info("📚 **No active SELL signals.** 💡 Stock not showing overvaluation.", unsafe_allow_html=True)
+                                    st.markdown("📚 **No active SELL signals.** 💡 Stock not showing overvaluation.", unsafe_allow_html=True)
                             
                             st.markdown("---")
                             
@@ -357,7 +357,7 @@ if compare_btn and tickers_input:
                                     </div>
                                     """, unsafe_allow_html=True)
                                 else:
-                                    st.info("📚 **Calculate entry signals first.** 💡 Stop loss is essential for risk management.", unsafe_allow_html=True)
+                                    st.markdown("📚 **Calculate entry signals first.** 💡 Stop loss is essential for risk management.", unsafe_allow_html=True)
                             
                             with col2:
                                 st.markdown("#### 🎯 Take Profit Targets - Educational Guide")
@@ -373,7 +373,7 @@ if compare_btn and tickers_input:
                                         </div>
                                         """, unsafe_allow_html=True)
                                 else:
-                                    st.info("📚 **Calculate entry signals first.** 💡 Setting profit targets helps lock in gains.", unsafe_allow_html=True)
+                                    st.markdown("📚 **Calculate entry signals first.** 💡 Setting profit targets helps lock in gains.", unsafe_allow_html=True)
                     else:
                         st.warning("⚠️ Trading signals not available. Ensure technical indicators are enabled and sufficient historical data is available.")
                 

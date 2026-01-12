@@ -198,7 +198,7 @@ if analyze_btn and ticker:
                                     </div>
                                     """, unsafe_allow_html=True)
                             else:
-                                st.info("📚 **No active BUY signals at this time.**<br><br>💡 **Learning Tip:** Wait for better entry opportunities. Patience is key in trading. Look for stocks trading below fair value or showing technical support.", unsafe_allow_html=True)
+                                st.markdown("📚 **No active BUY signals at this time.**<br><br>💡 **Learning Tip:** Wait for better entry opportunities. Patience is key in trading. Look for stocks trading below fair value or showing technical support.", unsafe_allow_html=True)
                         
                         with col2:
                             st.markdown("#### 🔴 SELL Signals - Educational Guide")
@@ -232,7 +232,7 @@ if analyze_btn and ticker:
                                     </div>
                                     """, unsafe_allow_html=True)
                             else:
-                                st.info("📚 **No active SELL signals at this time.**<br><br>💡 **Learning Tip:** This means the stock is not showing overvaluation or technical weakness. Continue monitoring for exit signals.", unsafe_allow_html=True)
+                                st.markdown("📚 **No active SELL signals at this time.**<br><br>💡 **Learning Tip:** This means the stock is not showing overvaluation or technical weakness. Continue monitoring for exit signals.", unsafe_allow_html=True)
                         
                         st.markdown("---")
                         
@@ -261,7 +261,7 @@ if analyze_btn and ticker:
                                 </div>
                                 """, unsafe_allow_html=True)
                             else:
-                                st.info("📚 **Calculate entry signals first to determine stop loss.**<br><br>💡 **Learning Tip:** A stop loss is essential for risk management. Always set one before entering a trade.", unsafe_allow_html=True)
+                                st.markdown("📚 **Calculate entry signals first to determine stop loss.**<br><br>💡 **Learning Tip:** A stop loss is essential for risk management. Always set one before entering a trade.", unsafe_allow_html=True)
                         
                         with col2:
                             st.markdown("#### 🎯 Take Profit Targets - Educational Guide")
@@ -282,7 +282,7 @@ if analyze_btn and ticker:
                                     </div>
                                     """, unsafe_allow_html=True)
                             else:
-                                st.info("📚 **Calculate entry signals first to determine take profit targets.**<br><br>💡 **Learning Tip:** Setting profit targets helps you lock in gains and avoid greed-driven decisions.", unsafe_allow_html=True)
+                                st.markdown("📚 **Calculate entry signals first to determine take profit targets.**<br><br>💡 **Learning Tip:** Setting profit targets helps you lock in gains and avoid greed-driven decisions.", unsafe_allow_html=True)
                         
                         # Trading Strategy Summary
                         st.markdown("---")
@@ -340,7 +340,7 @@ if analyze_btn and ticker:
                             </div>
                             """, unsafe_allow_html=True)
                         else:
-                            st.warning("📚 **No active buy signals. Wait for better entry opportunities.**<br><br>💡 **Learning Tip:** Patience is a trader's best friend. Better to wait for high-probability setups than to force trades.", unsafe_allow_html=True)
+                            st.markdown("⚠️ 📚 **No active buy signals. Wait for better entry opportunities.**<br><br>💡 **Learning Tip:** Patience is a trader's best friend. Better to wait for high-probability setups than to force trades.", unsafe_allow_html=True)
                 else:
                     st.warning("⚠️ Trading signals not available. Ensure technical indicators are enabled and sufficient historical data is available.")
             

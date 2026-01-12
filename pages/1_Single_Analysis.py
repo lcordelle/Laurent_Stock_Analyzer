@@ -158,6 +158,174 @@ if analyze_btn and ticker:
                 if signals_result:
                     signals_chart, trading_signals = signals_result
                     
+                    # ===== PROMINENT VISUAL SIGNALS DASHBOARD =====
+                    st.markdown("---")
+                    st.markdown("## 📊 Trading Signals Dashboard")
+                    st.markdown("### *Key trading levels at a glance*")
+                    
+                    # Get current price for calculations
+                    current_price = metrics.get('Current Price', 0) if metrics else 0
+                    
+                    # Create 5-column layout for main signals
+                    col1, col2, col3, col4, col5 = st.columns(5)
+                    
+                    # 1. ENTRY SIGNAL (Green)
+                    with col1:
+                        if trading_signals.get('buy_signals'):
+                            best_entry = min(trading_signals['buy_signals'], key=lambda x: x['price'])
+                            entry_price = best_entry['price']
+                            entry_type = best_entry['type']
+                            entry_confidence = best_entry['confidence']
+                            
+                            st.markdown(f"""
+                            <div style="background: linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%); 
+                                        padding: 25px; border-radius: 15px; text-align: center; 
+                                        box-shadow: 0 4px 6px rgba(0,0,0,0.2); border: 3px solid #1B5E20;">
+                                <h2 style="color: white; margin: 0 0 10px 0; font-size: 2.5em;">📈</h2>
+                                <h3 style="color: white; margin: 0 0 5px 0; font-size: 1.1em; font-weight: bold;">ENTRY</h3>
+                                <h1 style="color: white; margin: 10px 0; font-size: 2.2em; font-weight: bold;">${entry_price:.2f}</h1>
+                                <p style="color: #C8E6C9; margin: 5px 0; font-size: 0.85em;">{entry_type}</p>
+                                <p style="color: #A5D6A7; margin: 5px 0; font-size: 0.75em;">Confidence: {entry_confidence}</p>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        else:
+                            st.markdown("""
+                            <div style="background: #f5f5f5; padding: 25px; border-radius: 15px; text-align: center; 
+                                        border: 2px dashed #ccc;">
+                                <h2 style="color: #999; margin: 0 0 10px 0; font-size: 2.5em;">📈</h2>
+                                <h3 style="color: #999; margin: 0; font-size: 1.1em;">ENTRY</h3>
+                                <p style="color: #999; margin: 10px 0; font-size: 0.9em;">No signal</p>
+                            </div>
+                            """, unsafe_allow_html=True)
+                    
+                    # 2. EXIT SIGNAL (Red)
+                    with col2:
+                        if trading_signals.get('sell_signals'):
+                            best_exit = max(trading_signals['sell_signals'], key=lambda x: x['price'])
+                            exit_price = best_exit['price']
+                            exit_type = best_exit['type']
+                            exit_confidence = best_exit['confidence']
+                            
+                            st.markdown(f"""
+                            <div style="background: linear-gradient(135deg, #EF5350 0%, #C62828 100%); 
+                                        padding: 25px; border-radius: 15px; text-align: center; 
+                                        box-shadow: 0 4px 6px rgba(0,0,0,0.2); border: 3px solid #B71C1C;">
+                                <h2 style="color: white; margin: 0 0 10px 0; font-size: 2.5em;">📉</h2>
+                                <h3 style="color: white; margin: 0 0 5px 0; font-size: 1.1em; font-weight: bold;">EXIT</h3>
+                                <h1 style="color: white; margin: 10px 0; font-size: 2.2em; font-weight: bold;">${exit_price:.2f}</h1>
+                                <p style="color: #FFCDD2; margin: 5px 0; font-size: 0.85em;">{exit_type}</p>
+                                <p style="color: #EF9A9A; margin: 5px 0; font-size: 0.75em;">Confidence: {exit_confidence}</p>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        else:
+                            st.markdown("""
+                            <div style="background: #f5f5f5; padding: 25px; border-radius: 15px; text-align: center; 
+                                        border: 2px dashed #ccc;">
+                                <h2 style="color: #999; margin: 0 0 10px 0; font-size: 2.5em;">📉</h2>
+                                <h3 style="color: #999; margin: 0; font-size: 1.1em;">EXIT</h3>
+                                <p style="color: #999; margin: 10px 0; font-size: 0.9em;">No signal</p>
+                            </div>
+                            """, unsafe_allow_html=True)
+                    
+                    # 3. STOP LOSS (Orange/Red)
+                    with col3:
+                        if trading_signals.get('stop_loss'):
+                            sl_price = trading_signals['stop_loss']['price']
+                            if trading_signals.get('buy_signals'):
+                                entry_price = min(s['price'] for s in trading_signals['buy_signals'])
+                                risk_amount = entry_price - sl_price
+                                risk_pct = (risk_amount / entry_price) * 100
+                            else:
+                                risk_amount = 0
+                                risk_pct = 0
+                            
+                            st.markdown(f"""
+                            <div style="background: linear-gradient(135deg, #FF9800 0%, #E65100 100%); 
+                                        padding: 25px; border-radius: 15px; text-align: center; 
+                                        box-shadow: 0 4px 6px rgba(0,0,0,0.2); border: 3px solid #BF360C;">
+                                <h2 style="color: white; margin: 0 0 10px 0; font-size: 2.5em;">🛡️</h2>
+                                <h3 style="color: white; margin: 0 0 5px 0; font-size: 1.1em; font-weight: bold;">STOP LOSS</h3>
+                                <h1 style="color: white; margin: 10px 0; font-size: 2.2em; font-weight: bold;">${sl_price:.2f}</h1>
+                                <p style="color: #FFE0B2; margin: 5px 0; font-size: 0.85em;">Risk: ${risk_amount:.2f}</p>
+                                <p style="color: #FFCC80; margin: 5px 0; font-size: 0.75em;">({risk_pct:.1f}% below entry)</p>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        else:
+                            st.markdown("""
+                            <div style="background: #f5f5f5; padding: 25px; border-radius: 15px; text-align: center; 
+                                        border: 2px dashed #ccc;">
+                                <h2 style="color: #999; margin: 0 0 10px 0; font-size: 2.5em;">🛡️</h2>
+                                <h3 style="color: #999; margin: 0; font-size: 1.1em;">STOP LOSS</h3>
+                                <p style="color: #999; margin: 10px 0; font-size: 0.9em;">Calculate entry first</p>
+                            </div>
+                            """, unsafe_allow_html=True)
+                    
+                    # 4. BUY SIGNAL (Bright Green)
+                    with col4:
+                        if trading_signals.get('buy_signals'):
+                            buy_count = len(trading_signals['buy_signals'])
+                            avg_buy = sum(s['price'] for s in trading_signals['buy_signals']) / buy_count
+                            
+                            st.markdown(f"""
+                            <div style="background: linear-gradient(135deg, #66BB6A 0%, #388E3C 100%); 
+                                        padding: 25px; border-radius: 15px; text-align: center; 
+                                        box-shadow: 0 4px 6px rgba(0,0,0,0.2); border: 3px solid #2E7D32;">
+                                <h2 style="color: white; margin: 0 0 10px 0; font-size: 2.5em;">🟢</h2>
+                                <h3 style="color: white; margin: 0 0 5px 0; font-size: 1.1em; font-weight: bold;">BUY</h3>
+                                <h1 style="color: white; margin: 10px 0; font-size: 2.2em; font-weight: bold;">${avg_buy:.2f}</h1>
+                                <p style="color: #C8E6C9; margin: 5px 0; font-size: 0.85em;">{buy_count} signal(s)</p>
+                                <p style="color: #A5D6A7; margin: 5px 0; font-size: 0.75em;">Avg price</p>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        else:
+                            st.markdown("""
+                            <div style="background: #f5f5f5; padding: 25px; border-radius: 15px; text-align: center; 
+                                        border: 2px dashed #ccc;">
+                                <h2 style="color: #999; margin: 0 0 10px 0; font-size: 2.5em;">🟢</h2>
+                                <h3 style="color: #999; margin: 0; font-size: 1.1em;">BUY</h3>
+                                <p style="color: #999; margin: 10px 0; font-size: 0.9em;">No signals</p>
+                            </div>
+                            """, unsafe_allow_html=True)
+                    
+                    # 5. TAKE PROFIT (Gold/Orange)
+                    with col5:
+                        if trading_signals.get('take_profit'):
+                            best_tp = max(trading_signals['take_profit'], key=lambda x: x['price'])
+                            tp_price = best_tp['price']
+                            tp_count = len(trading_signals['take_profit'])
+                            
+                            if trading_signals.get('buy_signals'):
+                                entry_price = min(s['price'] for s in trading_signals['buy_signals'])
+                                profit_amount = tp_price - entry_price
+                                profit_pct = (profit_amount / entry_price) * 100
+                            else:
+                                profit_amount = 0
+                                profit_pct = 0
+                            
+                            st.markdown(f"""
+                            <div style="background: linear-gradient(135deg, #FFB74D 0%, #F57C00 100%); 
+                                        padding: 25px; border-radius: 15px; text-align: center; 
+                                        box-shadow: 0 4px 6px rgba(0,0,0,0.2); border: 3px solid #E65100;">
+                                <h2 style="color: white; margin: 0 0 10px 0; font-size: 2.5em;">🎯</h2>
+                                <h3 style="color: white; margin: 0 0 5px 0; font-size: 1.1em; font-weight: bold;">TAKE PROFIT</h3>
+                                <h1 style="color: white; margin: 10px 0; font-size: 2.2em; font-weight: bold;">${tp_price:.2f}</h1>
+                                <p style="color: #FFE0B2; margin: 5px 0; font-size: 0.85em;">+{profit_pct:.1f}% gain</p>
+                                <p style="color: #FFCC80; margin: 5px 0; font-size: 0.75em;">{tp_count} target(s)</p>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        else:
+                            st.markdown("""
+                            <div style="background: #f5f5f5; padding: 25px; border-radius: 15px; text-align: center; 
+                                        border: 2px dashed #ccc;">
+                                <h2 style="color: #999; margin: 0 0 10px 0; font-size: 2.5em;">🎯</h2>
+                                <h3 style="color: #999; margin: 0; font-size: 1.1em;">TAKE PROFIT</h3>
+                                <p style="color: #999; margin: 10px 0; font-size: 0.9em;">Calculate entry first</p>
+                            </div>
+                            """, unsafe_allow_html=True)
+                    
+                    st.markdown("---")
+                    st.markdown("## 📈 Trading Chart")
+                    
                     if signals_chart:
                         st.plotly_chart(signals_chart, use_container_width=True)
                         

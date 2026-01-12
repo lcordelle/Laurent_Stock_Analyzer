@@ -39,33 +39,50 @@ class AlphaVantageClient:
             'datatype': 'json'
         })
         
+        # Build full URL for debugging
+        full_url = f"{self.base_url}?function={function}&symbol={symbol}&apikey={self.api_key[:8]}...&datatype=json"
+        print(f"[Alpha Vantage] Request: {full_url}", file=__import__('sys').stderr)
+        
         try:
+            start_time = time.time()
             response = requests.get(self.base_url, params=params, timeout=30)
+            elapsed = time.time() - start_time
+            print(f"[Alpha Vantage] Response received in {elapsed:.2f}s, status: {response.status_code}", file=__import__('sys').stderr)
+            
             response.raise_for_status()
             data = response.json()
             
             # Check for API errors
             if 'Error Message' in data:
                 error_msg = data['Error Message']
-                print(f"Alpha Vantage Error for {symbol} ({function}): {error_msg}", file=__import__('sys').stderr)
+                print(f"[Alpha Vantage] ❌ Error for {symbol} ({function}): {error_msg}", file=__import__('sys').stderr)
                 raise Exception(f"Alpha Vantage Error: {error_msg}")
             if 'Note' in data:
                 note = data['Note']
-                print(f"Alpha Vantage Rate Limit for {symbol} ({function}): {note}", file=__import__('sys').stderr)
+                print(f"[Alpha Vantage] ⚠️ Rate Limit for {symbol} ({function}): {note}", file=__import__('sys').stderr)
                 raise Exception(f"Alpha Vantage Rate Limit: {note}")
             
             # Check if we got valid data
             if not data or len(data) == 0:
-                print(f"Alpha Vantage empty response for {symbol} ({function})", file=__import__('sys').stderr)
+                print(f"[Alpha Vantage] ❌ Empty response for {symbol} ({function})", file=__import__('sys').stderr)
                 raise Exception(f"Alpha Vantage empty response")
             
+            print(f"[Alpha Vantage] ✅ Success for {symbol} ({function}), response keys: {list(data.keys())[:3]}...", file=__import__('sys').stderr)
             return data
+        except requests.exceptions.Timeout as e:
+            error_msg = f"[Alpha Vantage] ❌ Timeout for {symbol} ({function}): {str(e)}"
+            print(error_msg, file=__import__('sys').stderr)
+            raise Exception(error_msg)
+        except requests.exceptions.ConnectionError as e:
+            error_msg = f"[Alpha Vantage] ❌ Connection error for {symbol} ({function}): {str(e)}"
+            print(error_msg, file=__import__('sys').stderr)
+            raise Exception(error_msg)
         except requests.exceptions.RequestException as e:
-            error_msg = f"Alpha Vantage request failed for {symbol} ({function}): {str(e)}"
+            error_msg = f"[Alpha Vantage] ❌ Request failed for {symbol} ({function}): {str(e)}"
             print(error_msg, file=__import__('sys').stderr)
             raise Exception(error_msg)
         except Exception as e:
-            print(f"Alpha Vantage error for {symbol} ({function}): {str(e)}", file=__import__('sys').stderr)
+            print(f"[Alpha Vantage] ❌ Error for {symbol} ({function}): {str(e)}", file=__import__('sys').stderr)
             raise
     
     def get_historical_data(self, symbol, period='1y'):

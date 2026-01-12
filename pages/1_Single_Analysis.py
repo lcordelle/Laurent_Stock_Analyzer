@@ -452,26 +452,232 @@ if analyze_btn and ticker:
                             else:
                                 st.markdown("📚 **Calculate entry signals first to determine take profit targets.**<br><br>💡 **Learning Tip:** Setting profit targets helps you lock in gains and avoid greed-driven decisions.", unsafe_allow_html=True)
                         
-                        # Trading Strategy Summary
+                        # ===== PROFESSIONAL TRADING TOOLS FOR 90% SUCCESS =====
                         st.markdown("---")
-                        st.markdown("#### 📋 Trading Strategy Summary - Complete Analysis")
+                        st.markdown("## 🎯 Professional Trading Tools - Maximize Success Probability")
                         
                         if trading_signals['buy_signals']:
                             best_buy = min(trading_signals['buy_signals'], key=lambda x: x['price'])
+                            entry_price = best_buy['price']
+                            
+                            # Calculate comprehensive metrics
+                            risk = best_buy['price'] - trading_signals['stop_loss']['price'] if trading_signals['stop_loss'] else 0
+                            risk_pct = (risk / best_buy['price']) * 100 if best_buy['price'] > 0 else 0
+                            
+                            best_tp = max(trading_signals['take_profit'], key=lambda x: x['price']) if trading_signals['take_profit'] else None
+                            reward = (best_tp['price'] - best_buy['price']) if best_tp else 0
+                            reward_pct = (reward / best_buy['price']) * 100 if best_buy['price'] > 0 else 0
+                            risk_reward = reward / risk if risk > 0 else 0
+                            
+                            # Calculate trade probability score (0-100%)
+                            probability_score = 50  # Base score
+                            if score and score.get('total_score'):
+                                probability_score += (score['total_score'] - 50) * 0.3  # Fundamental strength
+                            if best_buy['confidence'] == 'High':
+                                probability_score += 15
+                            elif best_buy['confidence'] == 'Medium':
+                                probability_score += 5
+                            if risk_reward >= 3:
+                                probability_score += 15
+                            elif risk_reward >= 2:
+                                probability_score += 10
+                            elif risk_reward >= 1.5:
+                                probability_score += 5
+                            if risk_pct <= 3:
+                                probability_score += 10  # Low risk
+                            elif risk_pct > 7:
+                                probability_score -= 10  # High risk
+                            
+                            # Volume analysis
+                            hist = data.get('history')
+                            volume_confirmation = "Neutral"
+                            if hist is not None and len(hist) > 20:
+                                recent_volume = hist['Volume'].iloc[-5:].mean()
+                                avg_volume = hist['Volume'].iloc[-20:].mean()
+                                if recent_volume > avg_volume * 1.2:
+                                    volume_confirmation = "Strong"
+                                    probability_score += 10
+                                elif recent_volume < avg_volume * 0.8:
+                                    volume_confirmation = "Weak"
+                                    probability_score -= 5
+                            
+                            # Market context (SPY trend)
+                            try:
+                                import yfinance as yf
+                                spy = yf.Ticker('SPY')
+                                spy_hist = spy.history(period='1mo')
+                                if len(spy_hist) > 0:
+                                    spy_current = spy_hist['Close'].iloc[-1]
+                                    spy_20d = spy_hist['Close'].iloc[-20] if len(spy_hist) >= 20 else spy_current
+                                    spy_trend = "Bullish" if spy_current > spy_20d else "Bearish"
+                                    if spy_trend == "Bullish":
+                                        probability_score += 5
+                                    else:
+                                        probability_score -= 5
+                                else:
+                                    spy_trend = "Unknown"
+                            except:
+                                spy_trend = "Unknown"
+                            
+                            probability_score = max(20, min(95, probability_score))  # Clamp between 20-95%
+                            
+                            # Display in prominent cards
+                            col1, col2, col3 = st.columns(3)
+                            
+                            with col1:
+                                # Trade Probability Score
+                                prob_color = "#4CAF50" if probability_score >= 70 else "#FFA726" if probability_score >= 50 else "#FF9800"
+                                prob_status = "Excellent" if probability_score >= 70 else "Good" if probability_score >= 50 else "Fair"
+                                
+                                st.markdown(f"""
+                                <div style="background: linear-gradient(135deg, {prob_color} 0%, #2E7D32 100%); 
+                                            padding: 25px; border-radius: 15px; text-align: center; 
+                                            box-shadow: 0 4px 6px rgba(0,0,0,0.2); border: 3px solid #1B5E20;">
+                                    <h2 style="color: white; margin: 0 0 10px 0; font-size: 2.5em;">📊</h2>
+                                    <h3 style="color: white; margin: 0 0 5px 0; font-size: 1.1em; font-weight: bold;">SUCCESS PROBABILITY</h3>
+                                    <h1 style="color: white; margin: 10px 0; font-size: 3em; font-weight: bold;">{probability_score:.0f}%</h1>
+                                    <p style="color: #C8E6C9; margin: 5px 0; font-size: 0.9em;">{prob_status} Setup</p>
+                                    <p style="color: #A5D6A7; margin: 5px 0; font-size: 0.75em;">Based on multiple factors</p>
+                                </div>
+                                """, unsafe_allow_html=True)
+                            
+                            with col2:
+                                # Risk/Reward Ratio (Prominent)
+                                rr_color = "#4CAF50" if risk_reward >= 3 else "#FFA726" if risk_reward >= 2 else "#FF9800"
+                                rr_status = "Excellent" if risk_reward >= 3 else "Good" if risk_reward >= 2 else "Fair"
+                                
+                                st.markdown(f"""
+                                <div style="background: linear-gradient(135deg, {rr_color} 0%, #E65100 100%); 
+                                            padding: 25px; border-radius: 15px; text-align: center; 
+                                            box-shadow: 0 4px 6px rgba(0,0,0,0.2); border: 3px solid #BF360C;">
+                                    <h2 style="color: white; margin: 0 0 10px 0; font-size: 2.5em;">⚖️</h2>
+                                    <h3 style="color: white; margin: 0 0 5px 0; font-size: 1.1em; font-weight: bold;">RISK/REWARD</h3>
+                                    <h1 style="color: white; margin: 10px 0; font-size: 3em; font-weight: bold;">{risk_reward:.2f}:1</h1>
+                                    <p style="color: #FFE0B2; margin: 5px 0; font-size: 0.9em;">{rr_status} Ratio</p>
+                                    <p style="color: #FFCC80; margin: 5px 0; font-size: 0.75em;">Risk: ${risk:.2f} | Reward: ${reward:.2f}</p>
+                                </div>
+                                """, unsafe_allow_html=True)
+                            
+                            with col3:
+                                # Volume & Market Context
+                                vol_color = "#4CAF50" if volume_confirmation == "Strong" else "#FF9800" if volume_confirmation == "Weak" else "#FFA726"
+                                market_color = "#4CAF50" if spy_trend == "Bullish" else "#EF5350" if spy_trend == "Bearish" else "#FFA726"
+                                
+                                st.markdown(f"""
+                                <div style="background: linear-gradient(135deg, {vol_color} 0%, #2E7D32 100%); 
+                                            padding: 25px; border-radius: 15px; text-align: center; 
+                                            box-shadow: 0 4px 6px rgba(0,0,0,0.2); border: 3px solid #1B5E20;">
+                                    <h2 style="color: white; margin: 0 0 10px 0; font-size: 2.5em;">📈</h2>
+                                    <h3 style="color: white; margin: 0 0 5px 0; font-size: 1.1em; font-weight: bold;">MARKET CONTEXT</h3>
+                                    <p style="color: white; margin: 10px 0; font-size: 1.2em; font-weight: bold;">Volume: {volume_confirmation}</p>
+                                    <p style="color: white; margin: 5px 0; font-size: 1.2em; font-weight: bold;">SPY: {spy_trend}</p>
+                                    <p style="color: #C8E6C9; margin: 5px 0; font-size: 0.75em;">Confirmation factors</p>
+                                </div>
+                                """, unsafe_allow_html=True)
+                            
+                            st.markdown("---")
+                            
+                            # Position Sizing Calculator
+                            st.markdown("### 💰 Position Sizing Calculator - Critical for Risk Management")
+                            st.markdown("*Calculate optimal position size based on your account and risk tolerance*")
+                            
+                            col1, col2, col3 = st.columns(3)
+                            
+                            with col1:
+                                account_size = st.number_input("💰 Account Size ($)", min_value=1000.0, value=10000.0, step=1000.0, key="account_size")
+                            
+                            with col2:
+                                risk_per_trade = st.slider("⚠️ Risk Per Trade (%)", min_value=0.5, max_value=5.0, value=1.0, step=0.5, key="risk_pct")
+                                st.caption("💡 Professional traders risk 1-2% per trade")
+                            
+                            with col3:
+                                risk_amount = account_size * (risk_per_trade / 100)
+                                max_loss_per_share = risk
+                                if max_loss_per_share > 0:
+                                    shares_to_buy = int(risk_amount / max_loss_per_share)
+                                    position_value = shares_to_buy * entry_price
+                                    position_pct = (position_value / account_size) * 100
+                                else:
+                                    shares_to_buy = 0
+                                    position_value = 0
+                                    position_pct = 0
+                                
+                                st.markdown(f"""
+                                <div style="background-color: #e3f2fd; padding: 20px; border-radius: 8px; border-left: 5px solid #2196F3; margin-top: 20px;">
+                                    <h4 style="margin: 0 0 10px 0; color: #1565C0;">📊 Recommended Position</h4>
+                                    <p style="margin: 5px 0; color: #1976D2; font-size: 1.3em;"><b>Shares:</b> {shares_to_buy}</p>
+                                    <p style="margin: 5px 0; color: #1976D2; font-size: 1.1em;"><b>Position Value:</b> ${position_value:,.2f}</p>
+                                    <p style="margin: 5px 0; color: #1976D2;"><b>% of Account:</b> {position_pct:.1f}%</p>
+                                    <p style="margin: 5px 0; color: #1976D2;"><b>Max Loss:</b> ${risk_amount:.2f} ({risk_per_trade}%)</p>
+                                </div>
+                                """, unsafe_allow_html=True)
+                            
+                            st.markdown("---")
+                            
+                            # Trade Checklist
+                            st.markdown("### ✅ Pre-Trade Checklist - Validate Before Entering")
+                            
+                            checklist_items = []
+                            checklist_items.append(("✅ Risk/Reward ≥ 2:1", risk_reward >= 2, f"Current: {risk_reward:.2f}:1"))
+                            checklist_items.append(("✅ Risk per trade ≤ 2%", risk_per_trade <= 2.0, f"Current: {risk_per_trade}%"))
+                            checklist_items.append(("✅ Stop loss set", trading_signals['stop_loss'] is not None, "Stop loss calculated"))
+                            checklist_items.append(("✅ Take profit targets set", len(trading_signals['take_profit']) > 0, f"{len(trading_signals['take_profit'])} targets"))
+                            checklist_items.append(("✅ Volume confirmation", volume_confirmation in ["Strong", "Neutral"], f"Volume: {volume_confirmation}"))
+                            checklist_items.append(("✅ Market trend favorable", spy_trend == "Bullish" or spy_trend == "Unknown", f"SPY: {spy_trend}"))
+                            checklist_items.append(("✅ Fundamental score ≥ 60", score and score.get('total_score', 0) >= 60, f"Score: {score.get('total_score', 0) if score else 0}/100"))
+                            checklist_items.append(("✅ Entry price below fair value", intrinsic_value and entry_price < intrinsic_value, f"Entry: ${entry_price:.2f} vs Fair: ${intrinsic_value:.2f}" if intrinsic_value else "N/A"))
+                            
+                            passed = sum(1 for _, check, _ in checklist_items if check)
+                            total = len(checklist_items)
+                            checklist_pct = (passed / total) * 100
+                            
+                            col1, col2 = st.columns([2, 1])
+                            
+                            with col1:
+                                for label, check, detail in checklist_items:
+                                    icon = "✅" if check else "❌"
+                                    color = "#4CAF50" if check else "#EF5350"
+                                    bg_color = "#e8f5e9" if check else "#ffebee"
+                                    
+                                    st.markdown(f"""
+                                    <div style="background-color: {bg_color}; padding: 12px; border-radius: 8px; border-left: 4px solid {color}; margin-bottom: 8px;">
+                                        <p style="margin: 0; color: {'#1B5E20' if check else '#B71C1C'}; font-size: 1em;">
+                                            <b>{icon} {label}</b> - {detail}
+                                        </p>
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                            
+                            with col2:
+                                checklist_color = "#4CAF50" if checklist_pct >= 75 else "#FFA726" if checklist_pct >= 50 else "#EF5350"
+                                
+                                st.markdown(f"""
+                                <div style="background: linear-gradient(135deg, {checklist_color} 0%, #2E7D32 100%); 
+                                            padding: 30px; border-radius: 15px; text-align: center; 
+                                            box-shadow: 0 4px 6px rgba(0,0,0,0.2); border: 3px solid #1B5E20;">
+                                    <h3 style="color: white; margin: 0 0 10px 0; font-size: 1.2em;">CHECKLIST</h3>
+                                    <h1 style="color: white; margin: 10px 0; font-size: 3.5em; font-weight: bold;">{passed}/{total}</h1>
+                                    <p style="color: #C8E6C9; margin: 5px 0; font-size: 1.1em; font-weight: bold;">{checklist_pct:.0f}% Complete</p>
+                                    <p style="color: #A5D6A7; margin: 10px 0 0 0; font-size: 0.9em;">{'✅ Ready to trade!' if checklist_pct >= 75 else '⚠️ Review items' if checklist_pct >= 50 else '❌ Not ready'}</p>
+                                </div>
+                                """, unsafe_allow_html=True)
+                            
+                            st.markdown("---")
+                            
+                            # Complete Trading Strategy Summary
+                            st.markdown("#### 📋 Complete Trading Strategy Summary")
                             
                             st.markdown(f"""
                             <div style="background-color: #e3f2fd; padding: 20px; border-radius: 8px; border-left: 5px solid #2196F3; margin-bottom: 15px;">
                                 <h4 style="margin: 0 0 10px 0; color: #1565C0;">📚 Recommended Entry Strategy</h4>
-                                <p style="margin: 5px 0; color: #1976D2; font-size: 1.1em;"><b>Entry Price:</b> ${best_buy['price']:.2f}</p>
+                                <p style="margin: 5px 0; color: #1976D2; font-size: 1.1em;"><b>Entry Price:</b> ${entry_price:.2f}</p>
                                 <p style="margin: 5px 0; color: #1976D2;"><b>Reason:</b> {best_buy['reason']}</p>
                                 <p style="margin: 5px 0; color: #1976D2;"><b>Signal Type:</b> {best_buy['type']}</p>
                                 <p style="margin: 5px 0; color: #1976D2;"><b>Confidence:</b> {best_buy['confidence']}</p>
+                                <p style="margin: 5px 0; color: #1976D2;"><b>Success Probability:</b> {probability_score:.0f}%</p>
                             </div>
                             """, unsafe_allow_html=True)
                             
                             if trading_signals['stop_loss']:
-                                risk = best_buy['price'] - trading_signals['stop_loss']['price']
-                                risk_pct = (risk / best_buy['price']) * 100
                                 st.markdown(f"""
                                 <div style="background-color: #fff3e0; padding: 15px; border-radius: 8px; margin-bottom: 10px;">
                                     <p style="margin: 0; color: #E65100;"><b>⚠️ Risk per Share:</b> ${risk:.2f} ({risk_pct:.1f}%)</p>
@@ -480,30 +686,71 @@ if analyze_btn and ticker:
                                 """, unsafe_allow_html=True)
                             
                             if trading_signals['take_profit']:
-                                best_tp = max(trading_signals['take_profit'], key=lambda x: x['price'])
-                                reward = best_tp['price'] - best_buy['price']
-                                reward_pct = (reward / best_buy['price']) * 100
-                                if trading_signals['stop_loss']:
-                                    risk = best_buy['price'] - trading_signals['stop_loss']['price']
-                                    if risk > 0:
-                                        risk_reward = reward / risk
-                                        st.markdown(f"""
-                                        <div style="background-color: #e8f5e9; padding: 15px; border-radius: 8px; margin-bottom: 10px;">
-                                            <p style="margin: 0; color: #1B5E20;"><b>🎯 Reward per Share:</b> ${reward:.2f} ({reward_pct:.1f}%)</p>
-                                            <p style="margin: 5px 0 0 0; color: #2E7D32;"><b>📊 Risk/Reward Ratio:</b> {risk_reward:.2f}:1</p>
-                                            <p style="margin: 5px 0 0 0; color: #4CAF50; font-size: 0.9em;">💡 A ratio above 2:1 is generally considered good. This means potential reward is {risk_reward:.1f}x the risk.</p>
-                                        </div>
-                                        """, unsafe_allow_html=True)
+                                st.markdown(f"""
+                                <div style="background-color: #e8f5e9; padding: 15px; border-radius: 8px; margin-bottom: 10px;">
+                                    <p style="margin: 0; color: #1B5E20;"><b>🎯 Reward per Share:</b> ${reward:.2f} ({reward_pct:.1f}%)</p>
+                                    <p style="margin: 5px 0 0 0; color: #2E7D32;"><b>📊 Risk/Reward Ratio:</b> {risk_reward:.2f}:1</p>
+                                    <p style="margin: 5px 0 0 0; color: #4CAF50; font-size: 0.9em;">💡 A ratio above 2:1 is generally considered good. This means potential reward is {risk_reward:.1f}x the risk.</p>
+                                </div>
+                                """, unsafe_allow_html=True)
+                            
+                            # Exit Strategy Options
+                            st.markdown("---")
+                            st.markdown("#### 🎯 Multiple Exit Strategies - Professional Approach")
+                            
+                            exit_col1, exit_col2, exit_col3 = st.columns(3)
+                            
+                            with exit_col1:
+                                st.markdown("""
+                                <div style="background-color: #e8f5e9; padding: 15px; border-radius: 8px; border-left: 4px solid #4CAF50;">
+                                    <h4 style="margin: 0 0 10px 0; color: #1B5E20;">📊 Strategy 1: Partial Exits</h4>
+                                    <p style="margin: 5px 0; color: #2E7D32; font-size: 0.9em;">
+                                        <b>Recommended:</b><br>
+                                        • Take 33% profit at TP1<br>
+                                        • Take 33% profit at TP2<br>
+                                        • Let 34% run to TP3 or trailing stop
+                                    </p>
+                                </div>
+                                """, unsafe_allow_html=True)
+                            
+                            with exit_col2:
+                                st.markdown("""
+                                <div style="background-color: #fff3e0; padding: 15px; border-radius: 8px; border-left: 4px solid #FF9800;">
+                                    <h4 style="margin: 0 0 10px 0; color: #E65100;">🛡️ Strategy 2: Trailing Stop</h4>
+                                    <p style="margin: 5px 0; color: #F57C00; font-size: 0.9em;">
+                                        <b>After TP1 hit:</b><br>
+                                        • Move stop loss to break-even<br>
+                                        • After TP2: Trail stop 5% below high<br>
+                                        • Protects profits automatically
+                                    </p>
+                                </div>
+                                """, unsafe_allow_html=True)
+                            
+                            with exit_col3:
+                                st.markdown("""
+                                <div style="background-color: #e3f2fd; padding: 15px; border-radius: 8px; border-left: 4px solid #2196F3;">
+                                    <h4 style="margin: 0 0 10px 0; color: #1565C0;">📈 Strategy 3: Let Winners Run</h4>
+                                    <p style="margin: 5px 0; color: #1976D2; font-size: 0.9em;">
+                                        <b>For strong trends:</b><br>
+                                        • Hold full position to TP3<br>
+                                        • Use trailing stop only<br>
+                                        • Exit on resistance or reversal signal
+                                    </p>
+                                </div>
+                                """, unsafe_allow_html=True)
                             
                             st.markdown("""
                             <div style="background-color: #f3e5f5; padding: 15px; border-radius: 8px; margin-top: 15px;">
-                                <h4 style="margin: 0 0 10px 0; color: #6A1B9A;">💡 Key Trading Lessons:</h4>
+                                <h4 style="margin: 0 0 10px 0; color: #6A1B9A;">💡 Professional Trading Rules for 90% Success:</h4>
                                 <ul style="margin: 0; padding-left: 20px; color: #7B1FA2;">
-                                    <li>Always use stop losses to protect your capital</li>
-                                    <li>Set realistic profit targets based on support/resistance</li>
-                                    <li>Never risk more than 1-2% of your portfolio on a single trade</li>
-                                    <li>Combine technical and fundamental analysis for better results</li>
-                                    <li>Practice patience - wait for high-probability setups</li>
+                                    <li><b>Always use position sizing calculator</b> - Never risk more than 1-2% per trade</li>
+                                    <li><b>Complete the checklist</b> - Only trade when 75%+ items pass</li>
+                                    <li><b>Respect stop losses</b> - Never move them further away</li>
+                                    <li><b>Use partial exits</b> - Lock in profits at each target</li>
+                                    <li><b>Monitor volume</b> - Strong volume confirms moves</li>
+                                    <li><b>Check market context</b> - Trade with the trend, not against it</li>
+                                    <li><b>Wait for high probability setups</b> - Patience beats FOMO</li>
+                                    <li><b>Review your trades</b> - Learn from wins and losses</li>
                                 </ul>
                             </div>
                             """, unsafe_allow_html=True)

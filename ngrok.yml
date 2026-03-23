@@ -1,0 +1,12 @@
+# ngrok config for VirtualFusion Stock Analyzer
+# Run: ngrok http 8501
+# Or: ngrok start --config ngrok.yml stock
+# Requires ngrok: https://ngrok.com/download
+# Auth: ngrok config add-authtoken YOUR_TOKEN
+
+version: "2"
+tunnels:
+  stock:
+    addr: 8501
+    proto: http
+    domain: laurent.ngrok.io

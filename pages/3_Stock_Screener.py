@@ -3,7 +3,9 @@ Stock Screener Page
 Filter stocks based on custom criteria with detailed analysis
 """
 
+import re
 import streamlit as st
+from utils.auth import require_auth
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
@@ -21,20 +23,23 @@ from utils.peer_benchmark import PeerBenchmark
 from utils.news_market import NewsMarketData
 from utils.metric_display import display_enhanced_metric
 from utils.portfolio_analyzer import PortfolioAnalyzer
-from components.styling import apply_platform_theme, render_header, render_footer
-from components.navigation import render_navigation
+from components.styling import apply_platform_theme, render_header, render_footer, render_trading_signal_card, render_buy_sell_badge, render_analyst_ranking_panel
+from components.navigation import render_top_navigation
+from components.outcome_sections import render_outcome_sections
+
+require_auth()
 
 # Page configuration
 st.set_page_config(
     page_title="Stock Screener",
     page_icon="🔍",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
 # Apply theme and navigation
 apply_platform_theme()
-render_navigation()
+render_top_navigation()
 
 # Initialize analyzers
 if 'analyzer' not in st.session_state:
@@ -65,1109 +70,420 @@ show_technical = st.session_state.get('show_technical', True)
 time_period = st.session_state.get('time_period', '1y')
 
 # Header
-render_header("🔍 Advanced Stock Screener & Portfolio Analyzer", "Filter stocks and analyze your portfolio")
+render_header("Stock Screener", "Filter stocks by criteria with automated analysis")
 
-# Tabs for Screener and Portfolio Analysis
-tab_screener, tab_portfolio = st.tabs(["🔍 Stock Screener", "💼 Portfolio Analyzer"])
+# Tabs for Screener, Portfolio Analysis, and Risk Dashboard
+tab_screener, tab_portfolio, tab_risk = st.tabs(["🔍 Stock Screener", "💼 Portfolio Analyzer", "📊 Risk Dashboard"])
 
 with tab_screener:
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        st.subheader("💰 Valuation Filters")
-        pe_min = st.number_input("Min P/E Ratio", value=0.0, step=1.0)
-        pe_max = st.number_input("Max P/E Ratio", value=100.0, step=1.0)
-        
-        market_cap_min = st.selectbox(
-            "Min Market Cap",
-            ["Any", "1M", "10M", "100M", "1B", "10B", "100B"]
-        )
-
-    with col2:
-        st.subheader("📊 Profitability Filters")
-        margin_min = st.slider("Min Gross Margin %", 0, 100, 20)
-        roe_min = st.slider("Min ROE %", 0, 100, 10)
-
-    with col3:
-        st.subheader("📈 Growth Filters")
-        revenue_growth_min = st.slider("Min Revenue Growth %", -50, 100, 0)
-
+    # Saved criteria section
+    if 'saved_criteria' not in st.session_state:
+        st.session_state.saved_criteria = {}
+    
+    col_save, col_load = st.columns([3, 1])
+    with col_save:
+        criteria_name = st.text_input("💾 Save Criteria As:", placeholder="e.g., Growth Stocks, Value Plays")
+    with col_load:
+        if st.session_state.saved_criteria:
+            selected_criteria = st.selectbox("📂 Load Saved:", ["-- Select --"] + list(st.session_state.saved_criteria.keys()))
+            if selected_criteria != "-- Select --" and st.button("Load"):
+                saved = st.session_state.saved_criteria[selected_criteria]
+                st.session_state.current_criteria = saved
+                st.rerun()
+    
+    # Initialize current criteria from session state or defaults
+    if 'current_criteria' not in st.session_state:
+        st.session_state.current_criteria = {}
+    
+    current = st.session_state.current_criteria
+    
+    # Filters in tabs
+    filter_tab1, filter_tab2, filter_tab3, filter_tab4 = st.tabs(["💰 Valuation", "📊 Profitability", "📈 Growth", "📉 Technical"])
+    
+    with filter_tab1:
+        col1, col2 = st.columns(2)
+        with col1:
+            pe_min = st.number_input("Min P/E Ratio", value=current.get('pe_min', 0.0), step=1.0, key='pe_min')
+            pe_max = st.number_input("Max P/E Ratio", value=current.get('pe_max', 100.0), step=1.0, key='pe_max')
+        with col2:
+            market_cap_min = st.selectbox(
+                "Min Market Cap",
+                ["Any", "1M", "10M", "100M", "1B", "10B", "100B"],
+                index=["Any", "1M", "10M", "100M", "1B", "10B", "100B"].index(current.get('market_cap_min', "Any")) if current.get('market_cap_min', "Any") in ["Any", "1M", "10M", "100M", "1B", "10B", "100B"] else 0,
+                key='market_cap_min'
+            )
+    
+    with filter_tab2:
+        col1, col2 = st.columns(2)
+        with col1:
+            margin_min = st.slider("Min Gross Margin %", 0, 100, current.get('margin_min', 20), key='margin_min')
+            roe_min = st.slider("Min ROE %", 0, 100, current.get('roe_min', 10), key='roe_min')
+        with col2:
+            profit_margin_min = st.slider("Min Profit Margin %", -50, 100, current.get('profit_margin_min', 0), key='profit_margin_min')
+    
+    with filter_tab3:
+        col1, col2 = st.columns(2)
+        with col1:
+            revenue_growth_min = st.slider("Min Revenue Growth %", -50, 100, current.get('revenue_growth_min', 0), key='revenue_growth_min')
+            earnings_growth_min = st.slider("Min Earnings Growth %", -50, 100, current.get('earnings_growth_min', 0), key='earnings_growth_min')
+        with col2:
+            score_min = st.slider("Min Overall Score", 0, 100, current.get('score_min', 0), key='score_min')
+    
+    with filter_tab4:
+        st.markdown("**Technical Indicator Filters**")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            rsi_min = st.slider("RSI Min", 0, 100, current.get('rsi_min', 0), key='rsi_min')
+            rsi_max = st.slider("RSI Max", 0, 100, current.get('rsi_max', 100), key='rsi_max')
+            rsi_oversold = st.checkbox("RSI Oversold (<30)", value=current.get('rsi_oversold', False), key='rsi_oversold')
+            rsi_overbought = st.checkbox("RSI Overbought (>70)", value=current.get('rsi_overbought', False), key='rsi_overbought')
+        with col2:
+            macd_bullish = st.checkbox("MACD Bullish Crossover", value=current.get('macd_bullish', False), key='macd_bullish')
+            macd_bearish = st.checkbox("MACD Bearish Crossover", value=current.get('macd_bearish', False), key='macd_bearish')
+            stoch_oversold = st.checkbox("Stochastic Oversold (<20)", value=current.get('stoch_oversold', False), key='stoch_oversold')
+            stoch_overbought = st.checkbox("Stochastic Overbought (>80)", value=current.get('stoch_overbought', False), key='stoch_overbought')
+        with col3:
+            adx_min = st.slider("ADX Min (Trend Strength)", 0, 100, current.get('adx_min', 0), key='adx_min')
+            price_above_sma20 = st.checkbox("Price > SMA 20", value=current.get('price_above_sma20', False), key='price_above_sma20')
+            price_above_sma50 = st.checkbox("Price > SMA 50", value=current.get('price_above_sma50', False), key='price_above_sma50')
+            golden_cross = st.checkbox("Golden Cross (SMA20 > SMA50)", value=current.get('golden_cross', False), key='golden_cross')
+    
+    # Save criteria button
+    col_save_btn, _ = st.columns([1, 4])
+    with col_save_btn:
+        if criteria_name and st.button("💾 Save Criteria"):
+            criteria_dict = {
+                'pe_min': pe_min, 'pe_max': pe_max, 'market_cap_min': market_cap_min,
+                'margin_min': margin_min, 'roe_min': roe_min, 'profit_margin_min': profit_margin_min,
+                'revenue_growth_min': revenue_growth_min, 'earnings_growth_min': earnings_growth_min, 'score_min': score_min,
+                'rsi_min': rsi_min, 'rsi_max': rsi_max, 'rsi_oversold': rsi_oversold, 'rsi_overbought': rsi_overbought,
+                'macd_bullish': macd_bullish, 'macd_bearish': macd_bearish,
+                'stoch_oversold': stoch_oversold, 'stoch_overbought': stoch_overbought,
+                'adx_min': adx_min, 'price_above_sma20': price_above_sma20, 'price_above_sma50': price_above_sma50,
+                'golden_cross': golden_cross
+            }
+            st.session_state.saved_criteria[criteria_name] = criteria_dict
+            st.success(f"✅ Criteria '{criteria_name}' saved!")
+            st.session_state.current_criteria = criteria_dict
+    
     st.markdown("---")
 
-    # Stock universe input
-    stock_universe = st.text_area(
-        "Enter stocks to screen (comma-separated):",
-        value="AAPL, MSFT, GOOGL, AMZN, NVDA, TSLA, META, AMD, NFLX, PYPL",
-        height=100
-    )
+    # Stock universe input with form for Enter key submission
+    with st.form("stock_screener_form", clear_on_submit=False):
+        stock_universe = st.text_area(
+            "Stock Universe",
+            value="",
+            height=100,
+            placeholder="e.g., AAPL, Apple, NVDA, Microsoft, Tesla"
+        )
+        submitted = st.form_submit_button("🔍 Run Screener", use_container_width=True)
 
-    screen_btn = st.button("🔍 Run Screener", type="primary")
-
-    if screen_btn and stock_universe:
-        tickers = [t.strip().upper() for t in stock_universe.split(',')]
+    if submitted and stock_universe:
+        tickers = [t.strip() for t in stock_universe.split(',') if t.strip()]
         
-        passed_stocks_analysis = {}
-        failed_tickers = []
-        
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        
-        for i, ticker in enumerate(tickers):
-            status_text.text(f"Screening {ticker}...")
-            data = analyzer.get_stock_data(ticker, period="1y")
+        if not tickers:
+            st.warning("⚠️ Please enter at least one ticker symbol")
+        else:
+            passed_stocks_analysis = {}
+            failed_tickers = []
+            filtered_out_tickers = []
             
-            if data and data.get('history') is not None and len(data.get('history', [])) > 0:
-                metrics = analyzer.get_key_metrics(data)
-                
-                # Apply filters
-                passes = True
-                
-                if metrics['P/E Ratio'] < pe_min or metrics['P/E Ratio'] > pe_max:
-                    passes = False
-                
-                if metrics['Gross Margin'] < margin_min:
-                    passes = False
-                
-                if metrics['ROE'] < roe_min:
-                    passes = False
-                
-                if metrics['Revenue Growth'] < revenue_growth_min:
-                    passes = False
-                
-                if passes:
-                    # Calculate full analysis
-                    score = analyzer.calculate_score(data)
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            for i, ticker in enumerate(tickers):
+                status_text.text(f"Screening {ticker}... ({i+1}/{len(tickers)})")
+                try:
+                    data = analyzer.get_stock_data(ticker, period="1y")
                     
-                    if show_technical and len(data['history']) >= 20:
-                        data['history'] = analyzer.calculate_technical_indicators(data['history'])
-                    
-                    forecast = analyzer.calculate_forecast(data, metrics, score)
-                    
-                    passed_stocks_analysis[ticker] = {
-                        'data': data,
-                        'metrics': metrics,
-                        'score': score,
-                        'forecast': forecast
-                    }
-            else:
-                failed_tickers.append(ticker)
+                    if data and data.get('history') is not None and len(data.get('history', [])) > 0:
+                        try:
+                            metrics = analyzer.get_key_metrics(data)
+                            
+                            # Calculate technical indicators if needed for technical filters
+                            hist_with_indicators = data['history']
+                            if show_technical and len(hist_with_indicators) >= 20:
+                                hist_with_indicators = analyzer.calculate_technical_indicators(hist_with_indicators.copy())
+                            
+                            # Apply filters
+                            passes = True
+                            filter_reasons = []
+                            
+                            # Check P/E Ratio (handle None/invalid values)
+                            pe_ratio = metrics.get('P/E Ratio', 0)
+                            if pe_ratio is None or (pe_ratio < pe_min or pe_ratio > pe_max):
+                                passes = False
+                                filter_reasons.append(f"P/E Ratio ({pe_ratio})")
+                            
+                            # Check Gross Margin
+                            gross_margin = metrics.get('Gross Margin', 0)
+                            if gross_margin is None or gross_margin < margin_min:
+                                passes = False
+                                filter_reasons.append(f"Gross Margin ({gross_margin}%)")
+                            
+                            # Check ROE
+                            roe = metrics.get('ROE', 0)
+                            if roe is None or roe < roe_min:
+                                passes = False
+                                filter_reasons.append(f"ROE ({roe}%)")
+                            
+                            # Check Profit Margin
+                            profit_margin = metrics.get('Profit Margin', 0)
+                            if profit_margin is None or profit_margin < profit_margin_min:
+                                passes = False
+                                filter_reasons.append(f"Profit Margin ({profit_margin}%)")
+                            
+                            # Check Revenue Growth
+                            revenue_growth = metrics.get('Revenue Growth', 0)
+                            if revenue_growth is None or revenue_growth < revenue_growth_min:
+                                passes = False
+                                filter_reasons.append(f"Revenue Growth ({revenue_growth}%)")
+                            
+                            # Check Earnings Growth
+                            earnings_growth = metrics.get('Earnings Growth', 0)
+                            if earnings_growth is None or earnings_growth < earnings_growth_min:
+                                passes = False
+                                filter_reasons.append(f"Earnings Growth ({earnings_growth}%)")
+                            
+                            # Technical Indicator Filters
+                            if show_technical and len(hist_with_indicators) >= 20:
+                                current_price_val = hist_with_indicators['Close'].iloc[-1]
+                                
+                                # RSI filters
+                                if 'RSI' in hist_with_indicators.columns:
+                                    rsi_val = float(hist_with_indicators['RSI'].iloc[-1]) if not pd.isna(hist_with_indicators['RSI'].iloc[-1]) else 50.0
+                                    if rsi_val < rsi_min or rsi_val > rsi_max:
+                                        passes = False
+                                        filter_reasons.append(f"RSI ({rsi_val:.1f})")
+                                    if rsi_oversold and rsi_val >= 30:
+                                        passes = False
+                                        filter_reasons.append(f"RSI not oversold ({rsi_val:.1f})")
+                                    if rsi_overbought and rsi_val <= 70:
+                                        passes = False
+                                        filter_reasons.append(f"RSI not overbought ({rsi_val:.1f})")
+                                
+                                # MACD filters
+                                if 'MACD' in hist_with_indicators.columns and 'Signal' in hist_with_indicators.columns:
+                                    macd_val = float(hist_with_indicators['MACD'].iloc[-1]) if not pd.isna(hist_with_indicators['MACD'].iloc[-1]) else 0.0
+                                    signal_val = float(hist_with_indicators['Signal'].iloc[-1]) if not pd.isna(hist_with_indicators['Signal'].iloc[-1]) else 0.0
+                                    if macd_bullish and macd_val <= signal_val:
+                                        passes = False
+                                        filter_reasons.append("MACD not bullish")
+                                    if macd_bearish and macd_val >= signal_val:
+                                        passes = False
+                                        filter_reasons.append("MACD not bearish")
+                                
+                                # Stochastic filters
+                                if 'Stoch_K' in hist_with_indicators.columns:
+                                    stoch_k = float(hist_with_indicators['Stoch_K'].iloc[-1]) if not pd.isna(hist_with_indicators['Stoch_K'].iloc[-1]) else 50.0
+                                    if stoch_oversold and stoch_k >= 20:
+                                        passes = False
+                                        filter_reasons.append(f"Stochastic not oversold ({stoch_k:.1f})")
+                                    if stoch_overbought and stoch_k <= 80:
+                                        passes = False
+                                        filter_reasons.append(f"Stochastic not overbought ({stoch_k:.1f})")
+                                
+                                # ADX filter
+                                if 'ADX' in hist_with_indicators.columns:
+                                    adx_val = float(hist_with_indicators['ADX'].iloc[-1]) if not pd.isna(hist_with_indicators['ADX'].iloc[-1]) else 25.0
+                                    if adx_val < adx_min:
+                                        passes = False
+                                        filter_reasons.append(f"ADX too low ({adx_val:.1f})")
+                                
+                                # Moving average filters
+                                if 'SMA_20' in hist_with_indicators.columns:
+                                    sma_20_val = float(hist_with_indicators['SMA_20'].iloc[-1]) if not pd.isna(hist_with_indicators['SMA_20'].iloc[-1]) else current_price_val
+                                    if price_above_sma20 and current_price_val <= sma_20_val:
+                                        passes = False
+                                        filter_reasons.append("Price not above SMA 20")
+                                
+                                if 'SMA_50' in hist_with_indicators.columns:
+                                    sma_50_val = float(hist_with_indicators['SMA_50'].iloc[-1]) if not pd.isna(hist_with_indicators['SMA_50'].iloc[-1]) else current_price_val
+                                    if price_above_sma50 and current_price_val <= sma_50_val:
+                                        passes = False
+                                        filter_reasons.append("Price not above SMA 50")
+                                    
+                                    # Golden Cross
+                                    if golden_cross and 'SMA_20' in hist_with_indicators.columns:
+                                        if sma_20_val <= sma_50_val:
+                                            passes = False
+                                            filter_reasons.append("No Golden Cross")
+                            
+                            # Check Overall Score (calculate once)
+                            score = analyzer.calculate_score(data)
+                            if score and score.get('total_score', 0) < score_min:
+                                passes = False
+                                filter_reasons.append(f"Score ({score.get('total_score', 0)})")
+                            
+                            if passes:
+                                # Full analysis already calculated above
+                                
+                                if show_technical and len(data['history']) >= 20:
+                                    data['history'] = analyzer.calculate_technical_indicators(data['history'])
+                                
+                                forecast = analyzer.calculate_forecast(data, metrics, score)
+                                
+                                passed_stocks_analysis[ticker] = {
+                                    'data': data,
+                                    'metrics': metrics,
+                                    'score': score,
+                                    'forecast': forecast
+                                }
+                            else:
+                                filtered_out_tickers.append((ticker, filter_reasons))
+                        except Exception as e:
+                            # Data fetched but metrics calculation failed
+                            failed_tickers.append(ticker)
+                            st.warning(f"⚠️ Could not analyze {ticker}: {str(e)}")
+                    else:
+                        # No data returned
+                        failed_tickers.append(ticker)
+                except Exception as e:
+                    # Failed to fetch data
+                    failed_tickers.append(ticker)
+                    st.warning(f"⚠️ Could not fetch data for {ticker}: {str(e)}")
+                
+                progress_bar.progress((i + 1) / len(tickers))
+                # Small delay to avoid rate limiting
+                import time
+                time.sleep(0.5)
             
-            progress_bar.progress((i + 1) / len(tickers))
-            # Small delay to avoid rate limiting
-            import time
-            time.sleep(0.5)
-        
-        status_text.empty()
-        progress_bar.empty()
-        
-        # Show failed tickers if any
-        if failed_tickers:
-            st.warning(f"⚠️ Could not fetch data for: {', '.join(failed_tickers)}")
-            st.info("💡 **Troubleshooting tips:**\n"
-                   "- Verify ticker symbols are correct (e.g., AAPL not APPL)\n"
-                   "- Some stocks may have limited data availability\n"
-                   "- Try again in a few moments (Yahoo Finance may be rate limiting)\n"
-                   "- Check that stocks are listed on major exchanges")
-        
-        if passed_stocks_analysis:
-            st.success(f"✅ Found {len(passed_stocks_analysis)} stocks matching criteria")
+            status_text.empty()
+            progress_bar.empty()
             
-            # Sort by score
-            sorted_tickers = sorted(passed_stocks_analysis.keys(), 
-                               key=lambda t: passed_stocks_analysis[t]['score']['total_score'], 
-                               reverse=True)
+            # Show results summary
+            if failed_tickers:
+                st.warning(f"⚠️ Could not fetch data for: {', '.join(failed_tickers)}")
+                st.info("💡 **Troubleshooting tips:**\n"
+                       "- Verify ticker symbols are correct (e.g., AAPL not APPL)\n"
+                       "- Some stocks may have limited data availability\n"
+                       "- Try again in a few moments (Yahoo Finance may be rate limiting)\n"
+                       "- Check that stocks are listed on major exchanges")
             
-            # Summary table
-            st.subheader("📊 Screening Results Summary")
-            summary_data = []
-            for ticker in sorted_tickers:
-                info = passed_stocks_analysis[ticker]
-                summary_data.append({
-                    'Ticker': ticker,
-                'Company': info['data']['info'].get('longName', ticker)[:30],
-                'Score': info['score']['total_score'],
-                'Price': info['metrics']['Current Price'],
-                'Forecast': info['forecast']['forecast_price'] if info['forecast'] else None,
-                'Change %': info['forecast']['forecast_change_pct'] if info['forecast'] else None,
-                'Probability': info['forecast']['probability'] if info['forecast'] else None,
-                'P/E Ratio': info['metrics']['P/E Ratio'],
-                'Gross Margin': info['metrics']['Gross Margin'],
-                'ROE': info['metrics']['ROE'],
-                })
+            if filtered_out_tickers:
+                with st.expander(f"📋 {len(filtered_out_tickers)} ticker(s) filtered out (did not meet criteria)", expanded=False):
+                    for ticker, reasons in filtered_out_tickers:
+                        st.text(f"• {ticker}: {', '.join(reasons)}")
             
-            summary_df = pd.DataFrame(summary_data)
-            st.dataframe(
-                summary_df.style.background_gradient(subset=['Score'], cmap='RdYlGn', vmin=0, vmax=100)
-                .format({
-                    'Price': '${:.2f}',
-                'Forecast': '${:.2f}' if 'Forecast' in summary_df.columns else None,
-                'Change %': '{:+.2f}%' if 'Change %' in summary_df.columns else None,
-                'Probability': '{:.1f}%' if 'Probability' in summary_df.columns else None,
-                'P/E Ratio': '{:.2f}',
-                'Gross Margin': '{:.2f}%',
-                'ROE': '{:.2f}%',
-            }),
+            if passed_stocks_analysis:
+                st.success(f"✅ Found {len(passed_stocks_analysis)} stocks matching criteria")
+                
+                # Sort by score
+                sorted_tickers = sorted(passed_stocks_analysis.keys(), 
+                                   key=lambda t: passed_stocks_analysis[t]['score']['total_score'], 
+                                   reverse=True)
+                
+                # Summary table
+                st.subheader("📊 Screening Results Summary")
+                summary_data = []
+                for ticker in sorted_tickers:
+                    info = passed_stocks_analysis[ticker]
+                    summary_data.append({
+                        'Ticker': ticker,
+                        'Company': info['data']['info'].get('longName', ticker)[:30],
+                        'Score': info['score']['total_score'],
+                        'Price': info['metrics']['Current Price'],
+                        'Forecast': info['forecast']['forecast_price'] if info['forecast'] else None,
+                        'Change %': info['forecast']['forecast_change_pct'] if info['forecast'] else None,
+                        'Probability': info['forecast']['probability'] if info['forecast'] else None,
+                        'P/E Ratio': info['metrics']['P/E Ratio'],
+                        'Gross Margin': info['metrics']['Gross Margin'],
+                        'ROE': info['metrics']['ROE'],
+                    })
+                
+                summary_df = pd.DataFrame(summary_data)
+                st.dataframe(
+                    summary_df.style.background_gradient(subset=['Score'], cmap='RdYlGn', vmin=0, vmax=100)
+                    .format({
+                        'Price': '${:.2f}',
+                        'Forecast': '${:.2f}' if 'Forecast' in summary_df.columns else None,
+                        'Change %': '{:+.2f}%' if 'Change %' in summary_df.columns else None,
+                        'Probability': '{:.1f}%' if 'Probability' in summary_df.columns else None,
+                        'P/E Ratio': '{:.2f}',
+                        'Gross Margin': '{:.2f}%',
+                        'ROE': '{:.2f}%',
+                    }),
                 use_container_width=True,
                 hide_index=True
-            )
-            
-            st.markdown("---")
-            st.subheader("📈 Detailed Analysis for Screened Stocks")
-            
-            # Display detailed analysis for each stock (same style as Single Analysis)
-            for ticker in sorted_tickers:
-                info = passed_stocks_analysis[ticker]
-                data = info['data']
-                metrics = info['metrics']
-                score = info['score']
-                forecast = info['forecast']
+                )
                 
-                # Create expander for each stock
-                with st.expander(f"📊 {ticker} - {data['info'].get('longName', ticker)} | Score: {score['total_score']}/100", expanded=False):
-                    # Company info
+                st.markdown("---")
+                st.subheader("📈 Detailed Analysis for Screened Stocks")
+                
+                # Display detailed analysis for each stock (same style as Single Analysis)
+                for ticker in sorted_tickers:
+                    info = passed_stocks_analysis[ticker]
+                    data = info['data']
+                    metrics = info['metrics']
+                    score = info['score']
+                    forecast = info['forecast']
+                    
+                    # Display company info (same as Single Analysis)
+                    st.subheader(f"{data['info'].get('longName', ticker)} ({ticker})")
                     st.write(data['info'].get('longBusinessSummary', 'No description available')[:500] + '...')
                     
-                    # Score display
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        score_color = 'positive' if score['total_score'] >= 70 else 'negative' if score['total_score'] < 50 else 'neutral'
-                        st.markdown(f"### Overall Score")
-                        st.markdown(f'<p class="{score_color}" style="font-size: 3rem; font-weight: bold;">{score["total_score"]}/100</p>', 
-                                  unsafe_allow_html=True)
-                    with col2:
-                        st.metric("Current Price", f"${metrics['Current Price']:.2f}")
-                        if forecast:
-                            st.metric("Forecast Price", f"${forecast['forecast_price']:.2f}", 
-                                     delta=f"{forecast['forecast_change_pct']:+.2f}%")
-                    with col3:
-                        st.metric("Market Cap", f"${metrics['Market Cap']/1e9:.2f}B" if metrics['Market Cap'] > 1e9 else f"${metrics['Market Cap']/1e6:.2f}M")
-                        if forecast:
-                            st.metric("Probability", f"{forecast['probability']:.1f}%")
-                    
                     st.markdown("---")
                     
-                    # Score Breakdown Table with Forecast
-                    create_score_breakdown_table(score, forecast)
+                    # Get news articles
+                    news_articles = []
+                    try:
+                        news_articles = news_market.get_stock_news(ticker, limit=5)
+                    except Exception as e:
+                        pass
                     
-                    st.markdown("---")
+                    # Get analyst ratings
+                    ratings_result = None
+                    try:
+                        ratings_result = ratings_agg.aggregate_ratings(ticker, score, data['info'])
+                    except Exception as e:
+                        pass
                     
-                    # Tabs for different views - Now includes Trading Signals, Valuation, Ratings, Peers, and News
-                    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
-                        "📈 Charts", "🎯 Trading Signals", "📊 Key Metrics", "💰 Financials", "🎯 Technical", "⚠️ Risk",
-                        "💎 Valuation", "⭐ Ratings", "🔗 Peers", "📰 News"
-                    ])
+                    # Calculate intrinsic value
+                    intrinsic_value = None
+                    try:
+                        valuation_result = valuation.comprehensive_valuation(ticker, data['info'], metrics)
+                        if valuation_result:
+                            intrinsic_value = valuation_result['intrinsic_value']
+                    except:
+                        pass
                     
-                    with tab1:
-                        if len(data['history']) > 0:
-                            # Calculate intrinsic value for fair value tunnel
-                            intrinsic_value = None
-                            try:
-                                valuation_result = valuation.comprehensive_valuation(ticker, data['info'], metrics)
-                                if valuation_result:
-                                    intrinsic_value = valuation_result['intrinsic_value']
-                            except:
-                                pass  # If valuation fails, continue without fair value tunnel
-                            
-                            price_chart = create_price_chart(data, intrinsic_value=intrinsic_value, metrics=metrics)
-                            if price_chart:
-                                st.plotly_chart(price_chart, use_container_width=True)
-                                st.caption("💡 **Chart Features:** Fair Value Tunnel (blue shaded area), VWAP (purple), Support/Resistance (green/red), Pivot Points (gray/orange), Moving Averages, Bollinger Bands, Entry/Exit Signals")
-                            st.plotly_chart(create_volume_chart(data['history'], ticker), use_container_width=True)
-                    
-                    with tab2:
-                        # Trading Signals Tab
-                        st.markdown("### 🎯 Professional Trading Signals")
-                        st.markdown("*Buy/Sell zones with entry/exit points, stop loss, and take profit targets*")
-                        
-                        # Calculate intrinsic value
-                        intrinsic_value = None
-                        try:
-                            valuation_result = valuation.comprehensive_valuation(ticker, data['info'], metrics)
-                            if valuation_result:
-                                intrinsic_value = valuation_result['intrinsic_value']
-                        except:
-                            pass
-                        
-                        # Create trading signals chart
-                        signals_result = create_trading_signals_chart(data, intrinsic_value=intrinsic_value, metrics=metrics, score=score)
-                        
+                    # Get trading signals
+                    trading_signals_data = None
+                    try:
+                        signals_result = create_trading_signals_chart(data, intrinsic_value=intrinsic_value, metrics=metrics, score=score, analyzer=analyzer)
                         if signals_result:
-                            signals_chart, trading_signals = signals_result
-                            
-                            # ===== PROMINENT VISUAL SIGNALS DASHBOARD =====
-                            st.markdown("---")
-                            st.markdown("## 📊 Trading Signals Dashboard")
-                            st.markdown("### *Key trading levels at a glance*")
-                            
-                            # Get current price for calculations
-                            current_price = metrics.get('Current Price', 0) if metrics else 0
-                            
-                            # Create 5-column layout for main signals
-                            col1, col2, col3, col4, col5 = st.columns(5)
-                            
-                            # 1. ENTRY SIGNAL (Green)
-                            with col1:
-                                if trading_signals.get('buy_signals'):
-                                    best_entry = min(trading_signals['buy_signals'], key=lambda x: x['price'])
-                                    entry_price = best_entry['price']
-                                    entry_type = best_entry['type']
-                                    entry_confidence = best_entry['confidence']
-                                    
-                                    st.markdown(f"""
-                                    <div style="background: linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%); 
-                                                padding: 25px; border-radius: 15px; text-align: center; 
-                                                box-shadow: 0 4px 6px rgba(0,0,0,0.2); border: 3px solid #1B5E20;">
-                                        <h2 style="color: white; margin: 0 0 10px 0; font-size: 2.5em;">📈</h2>
-                                        <h3 style="color: white; margin: 0 0 5px 0; font-size: 1.1em; font-weight: bold;">ENTRY</h3>
-                                        <h1 style="color: white; margin: 10px 0; font-size: 2.2em; font-weight: bold;">${entry_price:.2f}</h1>
-                                        <p style="color: #C8E6C9; margin: 5px 0; font-size: 0.85em;">{entry_type}</p>
-                                        <p style="color: #A5D6A7; margin: 5px 0; font-size: 0.75em;">Confidence: {entry_confidence}</p>
-                                    </div>
-                                    """, unsafe_allow_html=True)
-                                else:
-                                    st.markdown("""
-                                    <div style="background: #f5f5f5; padding: 25px; border-radius: 15px; text-align: center; 
-                                                border: 2px dashed #ccc;">
-                                        <h2 style="color: #999; margin: 0 0 10px 0; font-size: 2.5em;">📈</h2>
-                                        <h3 style="color: #999; margin: 0; font-size: 1.1em;">ENTRY</h3>
-                                        <p style="color: #999; margin: 10px 0; font-size: 0.9em;">No signal</p>
-                                    </div>
-                                    """, unsafe_allow_html=True)
-                            
-                            # 2. EXIT SIGNAL (Red)
-                            with col2:
-                                if trading_signals.get('sell_signals'):
-                                    best_exit = max(trading_signals['sell_signals'], key=lambda x: x['price'])
-                                    exit_price = best_exit['price']
-                                    exit_type = best_exit['type']
-                                    exit_confidence = best_exit['confidence']
-                                    
-                                    st.markdown(f"""
-                                    <div style="background: linear-gradient(135deg, #EF5350 0%, #C62828 100%); 
-                                                padding: 25px; border-radius: 15px; text-align: center; 
-                                                box-shadow: 0 4px 6px rgba(0,0,0,0.2); border: 3px solid #B71C1C;">
-                                        <h2 style="color: white; margin: 0 0 10px 0; font-size: 2.5em;">📉</h2>
-                                        <h3 style="color: white; margin: 0 0 5px 0; font-size: 1.1em; font-weight: bold;">EXIT</h3>
-                                        <h1 style="color: white; margin: 10px 0; font-size: 2.2em; font-weight: bold;">${exit_price:.2f}</h1>
-                                        <p style="color: #FFCDD2; margin: 5px 0; font-size: 0.85em;">{exit_type}</p>
-                                        <p style="color: #EF9A9A; margin: 5px 0; font-size: 0.75em;">Confidence: {exit_confidence}</p>
-                                    </div>
-                                    """, unsafe_allow_html=True)
-                                else:
-                                    st.markdown("""
-                                    <div style="background: #f5f5f5; padding: 25px; border-radius: 15px; text-align: center; 
-                                                border: 2px dashed #ccc;">
-                                        <h2 style="color: #999; margin: 0 0 10px 0; font-size: 2.5em;">📉</h2>
-                                        <h3 style="color: #999; margin: 0; font-size: 1.1em;">EXIT</h3>
-                                        <p style="color: #999; margin: 10px 0; font-size: 0.9em;">No signal</p>
-                                    </div>
-                                    """, unsafe_allow_html=True)
-                            
-                            # 3. STOP LOSS (Orange/Red)
-                            with col3:
-                                if trading_signals.get('stop_loss'):
-                                    sl_price = trading_signals['stop_loss']['price']
-                                    if trading_signals.get('buy_signals'):
-                                        entry_price = min(s['price'] for s in trading_signals['buy_signals'])
-                                        risk_amount = entry_price - sl_price
-                                        risk_pct = (risk_amount / entry_price) * 100
-                                    else:
-                                        risk_amount = 0
-                                        risk_pct = 0
-                                    
-                                    st.markdown(f"""
-                                    <div style="background: linear-gradient(135deg, #FF9800 0%, #E65100 100%); 
-                                                padding: 25px; border-radius: 15px; text-align: center; 
-                                                box-shadow: 0 4px 6px rgba(0,0,0,0.2); border: 3px solid #BF360C;">
-                                        <h2 style="color: white; margin: 0 0 10px 0; font-size: 2.5em;">🛡️</h2>
-                                        <h3 style="color: white; margin: 0 0 5px 0; font-size: 1.1em; font-weight: bold;">STOP LOSS</h3>
-                                        <h1 style="color: white; margin: 10px 0; font-size: 2.2em; font-weight: bold;">${sl_price:.2f}</h1>
-                                        <p style="color: #FFE0B2; margin: 5px 0; font-size: 0.85em;">Risk: ${risk_amount:.2f}</p>
-                                        <p style="color: #FFCC80; margin: 5px 0; font-size: 0.75em;">({risk_pct:.1f}% below entry)</p>
-                                    </div>
-                                    """, unsafe_allow_html=True)
-                                else:
-                                    st.markdown("""
-                                    <div style="background: #f5f5f5; padding: 25px; border-radius: 15px; text-align: center; 
-                                                border: 2px dashed #ccc;">
-                                        <h2 style="color: #999; margin: 0 0 10px 0; font-size: 2.5em;">🛡️</h2>
-                                        <h3 style="color: #999; margin: 0; font-size: 1.1em;">STOP LOSS</h3>
-                                        <p style="color: #999; margin: 10px 0; font-size: 0.9em;">Calculate entry first</p>
-                                    </div>
-                                    """, unsafe_allow_html=True)
-                            
-                            # 4. BUY SIGNAL (Bright Green)
-                            with col4:
-                                if trading_signals.get('buy_signals'):
-                                    buy_count = len(trading_signals['buy_signals'])
-                                    avg_buy = sum(s['price'] for s in trading_signals['buy_signals']) / buy_count
-                                    
-                                    st.markdown(f"""
-                                    <div style="background: linear-gradient(135deg, #66BB6A 0%, #388E3C 100%); 
-                                                padding: 25px; border-radius: 15px; text-align: center; 
-                                                box-shadow: 0 4px 6px rgba(0,0,0,0.2); border: 3px solid #2E7D32;">
-                                        <h2 style="color: white; margin: 0 0 10px 0; font-size: 2.5em;">🟢</h2>
-                                        <h3 style="color: white; margin: 0 0 5px 0; font-size: 1.1em; font-weight: bold;">BUY</h3>
-                                        <h1 style="color: white; margin: 10px 0; font-size: 2.2em; font-weight: bold;">${avg_buy:.2f}</h1>
-                                        <p style="color: #C8E6C9; margin: 5px 0; font-size: 0.85em;">{buy_count} signal(s)</p>
-                                        <p style="color: #A5D6A7; margin: 5px 0; font-size: 0.75em;">Avg price</p>
-                                    </div>
-                                    """, unsafe_allow_html=True)
-                                else:
-                                    st.markdown("""
-                                    <div style="background: #f5f5f5; padding: 25px; border-radius: 15px; text-align: center; 
-                                                border: 2px dashed #ccc;">
-                                        <h2 style="color: #999; margin: 0 0 10px 0; font-size: 2.5em;">🟢</h2>
-                                        <h3 style="color: #999; margin: 0; font-size: 1.1em;">BUY</h3>
-                                        <p style="color: #999; margin: 10px 0; font-size: 0.9em;">No signals</p>
-                                    </div>
-                                    """, unsafe_allow_html=True)
-                            
-                            # 5. TAKE PROFIT (Gold/Orange)
-                            with col5:
-                                if trading_signals.get('take_profit'):
-                                    best_tp = max(trading_signals['take_profit'], key=lambda x: x['price'])
-                                    tp_price = best_tp['price']
-                                    tp_count = len(trading_signals['take_profit'])
-                                    
-                                    if trading_signals.get('buy_signals'):
-                                        entry_price = min(s['price'] for s in trading_signals['buy_signals'])
-                                        profit_amount = tp_price - entry_price
-                                        profit_pct = (profit_amount / entry_price) * 100
-                                    else:
-                                        profit_amount = 0
-                                        profit_pct = 0
-                                    
-                                    st.markdown(f"""
-                                    <div style="background: linear-gradient(135deg, #FFB74D 0%, #F57C00 100%); 
-                                                padding: 25px; border-radius: 15px; text-align: center; 
-                                                box-shadow: 0 4px 6px rgba(0,0,0,0.2); border: 3px solid #E65100;">
-                                        <h2 style="color: white; margin: 0 0 10px 0; font-size: 2.5em;">🎯</h2>
-                                        <h3 style="color: white; margin: 0 0 5px 0; font-size: 1.1em; font-weight: bold;">TAKE PROFIT</h3>
-                                        <h1 style="color: white; margin: 10px 0; font-size: 2.2em; font-weight: bold;">${tp_price:.2f}</h1>
-                                        <p style="color: #FFE0B2; margin: 5px 0; font-size: 0.85em;">+{profit_pct:.1f}% gain</p>
-                                        <p style="color: #FFCC80; margin: 5px 0; font-size: 0.75em;">{tp_count} target(s)</p>
-                                    </div>
-                                    """, unsafe_allow_html=True)
-                                else:
-                                    st.markdown("""
-                                    <div style="background: #f5f5f5; padding: 25px; border-radius: 15px; text-align: center; 
-                                                border: 2px dashed #ccc;">
-                                        <h2 style="color: #999; margin: 0 0 10px 0; font-size: 2.5em;">🎯</h2>
-                                        <h3 style="color: #999; margin: 0; font-size: 1.1em;">TAKE PROFIT</h3>
-                                        <p style="color: #999; margin: 10px 0; font-size: 0.9em;">Calculate entry first</p>
-                                    </div>
-                                    """, unsafe_allow_html=True)
-                            
-                            st.markdown("---")
-                            st.markdown("## 📈 Trading Chart")
-                            
-                            if signals_chart:
-                                st.plotly_chart(signals_chart, use_container_width=True)
-                                
-                                st.markdown("---")
-                                
-                                # Display detailed signals breakdown
-                                col1, col2 = st.columns(2)
-                                
-                                with col1:
-                                    st.markdown("#### 🟢 BUY Signals - Educational Guide")
-                                    st.caption("💡 Hover over chart markers for detailed explanations")
-                                    
-                                    if trading_signals['buy_signals']:
-                                        for signal in trading_signals['buy_signals']:
-                                            confidence_color = "#4CAF50" if signal['confidence'] == 'High' else "#FFA726"
-                                            confidence_icon = "🟢" if signal['confidence'] == 'High' else "🟡"
-                                            
-                                            if signal['type'] == 'Value Buy':
-                                                instruction = "📚 <b>Value Buy:</b> Stock is below fair value - long-term opportunity"
-                                                action = "✅ Consider entering for fundamental value"
-                                            elif signal['type'] == 'Technical Buy':
-                                                instruction = "📚 <b>Technical Buy:</b> Oversold + Support - potential bounce"
-                                                action = "✅ Consider short-medium term trade"
-                                            else:
-                                                instruction = "📚 <b>Momentum Buy:</b> Bullish trend - ride the momentum"
-                                                action = "✅ Use trailing stops to protect gains"
-                                            
-                                            st.markdown(f"""
-                                            <div style="background-color: #e8f5e9; padding: 20px; border-radius: 8px; border-left: 5px solid {confidence_color}; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                                                <h4 style="margin: 0 0 10px 0; color: #1B5E20;">{confidence_icon} {signal['type']} - ${signal['price']:.2f}</h4>
-                                                <p style="margin: 8px 0; color: #2E7D32; font-weight: bold;">📊 {signal['reason']}</p>
-                                                <p style="margin: 10px 0 5px 0; color: #4CAF50; font-weight: bold;">{confidence_icon} Confidence: {signal['confidence']}</p>
-                                                <hr style="margin: 10px 0; border-color: #a5d6a7;">
-                                                <p style="margin: 8px 0; color: #1B5E20; font-size: 0.9em;">{instruction}</p>
-                                                <p style="margin: 8px 0; color: #1B5E20; font-size: 0.9em;">{action}</p>
-                                            </div>
-                                            """, unsafe_allow_html=True)
-                                    else:
-                                        st.markdown("📚 **No active BUY signals.** 💡 Wait for better entry opportunities.", unsafe_allow_html=True)
-                                
-                                with col2:
-                                    st.markdown("#### 🔴 SELL Signals - Educational Guide")
-                                    st.caption("💡 Hover over chart markers for detailed explanations")
-                                    
-                                    if trading_signals['sell_signals']:
-                                        for signal in trading_signals['sell_signals']:
-                                            confidence_color = "#EF5350" if signal['confidence'] == 'High' else "#FF9800"
-                                            confidence_icon = "🔴" if signal['confidence'] == 'High' else "🟠"
-                                            
-                                            if signal['type'] == 'Value Sell':
-                                                instruction = "📚 <b>Value Sell:</b> Stock is above fair value - profit opportunity"
-                                                action = "✅ Consider taking profits"
-                                            elif signal['type'] == 'Technical Sell':
-                                                instruction = "📚 <b>Technical Sell:</b> Overbought + Resistance - potential pullback"
-                                                action = "✅ Take profits near resistance"
-                                            else:
-                                                instruction = "📚 <b>Momentum Sell:</b> Bearish trend - protect capital"
-                                                action = "✅ Exit to avoid further decline"
-                                            
-                                            st.markdown(f"""
-                                            <div style="background-color: #ffebee; padding: 20px; border-radius: 8px; border-left: 5px solid {confidence_color}; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                                                <h4 style="margin: 0 0 10px 0; color: #B71C1C;">{confidence_icon} {signal['type']} - ${signal['price']:.2f}</h4>
-                                                <p style="margin: 8px 0; color: #C62828; font-weight: bold;">📊 {signal['reason']}</p>
-                                                <p style="margin: 10px 0 5px 0; color: #EF5350; font-weight: bold;">{confidence_icon} Confidence: {signal['confidence']}</p>
-                                                <hr style="margin: 10px 0; border-color: #ef9a9a;">
-                                                <p style="margin: 8px 0; color: #B71C1C; font-size: 0.9em;">{instruction}</p>
-                                                <p style="margin: 8px 0; color: #B71C1C; font-size: 0.9em;">{action}</p>
-                                            </div>
-                                            """, unsafe_allow_html=True)
-                                    else:
-                                        st.markdown("📚 **No active SELL signals.** 💡 Stock not showing overvaluation.", unsafe_allow_html=True)
-                                
-                                st.markdown("---")
-                                
-                                # Risk Management
-                                col1, col2 = st.columns(2)
-                                
-                                with col1:
-                                    st.markdown("#### 🛡️ Risk Management - Educational Guide")
-                                    if trading_signals['stop_loss']:
-                                        sl = trading_signals['stop_loss']
-                                        st.markdown(f"""
-                                        <div style="background-color: #fff3e0; padding: 20px; border-radius: 8px; border-left: 5px solid #FF9800; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                                            <h4 style="margin: 0 0 10px 0; color: #E65100;">🛡️ Stop Loss: ${sl['price']:.2f}</h4>
-                                            <p style="margin: 8px 0; color: #F57C00; font-weight: bold;">📊 {sl['reason']}</p>
-                                            <hr style="margin: 10px 0; border-color: #ffb74d;">
-                                            <p style="margin: 8px 0; color: #E65100; font-size: 0.9em;">
-                                                <b>📚 What is a Stop Loss?</b><br>
-                                                A stop loss limits your maximum loss per share. Always set one before entering a trade.
-                                            </p>
-                                        </div>
-                                        """, unsafe_allow_html=True)
-                                    else:
-                                        st.markdown("📚 **Calculate entry signals first.** 💡 Stop loss is essential for risk management.", unsafe_allow_html=True)
-                                
-                                with col2:
-                                    st.markdown("#### 🎯 Take Profit Targets - Educational Guide")
-                                    if trading_signals['take_profit']:
-                                        for tp in trading_signals['take_profit']:
-                                            st.markdown(f"""
-                                            <div style="background-color: #e8f5e9; padding: 20px; border-radius: 8px; border-left: 5px solid #4CAF50; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                                                <h4 style="margin: 0 0 10px 0; color: #1B5E20;">🎯 {tp['label']}</h4>
-                                                <p style="margin: 8px 0; color: #2E7D32; font-size: 0.9em;">
-                                                    <b>📚 Take Profit Strategy:</b><br>
-                                                    Consider taking partial profits at each target. Let remaining position run to higher targets.
-                                                </p>
-                                            </div>
-                                            """, unsafe_allow_html=True)
-                                    else:
-                                        st.markdown("📚 **Calculate entry signals first.** 💡 Setting profit targets helps lock in gains.", unsafe_allow_html=True)
-                        else:
-                            st.warning("⚠️ Trading signals not available. Ensure technical indicators are enabled and sufficient historical data is available.")
+                            _, trading_signals_data = signals_result
+                    except Exception as e:
+                        pass
                     
-                    with tab3:
-                        col1, col2, col3 = st.columns(3)
-                        
-                        with col1:
-                            st.markdown("### 📍 Price Information")
-                            st.markdown(f"**Today's Range:** {metrics['Today Range']}")
-                            st.caption("💡 The trading range for today (low to high price)")
-                            
-                            st.markdown(f"**52 Week Range:** {metrics['52 Week Range']}")
-                            st.caption("💡 The lowest and highest prices over the past year - shows price volatility range")
-                            
-                            display_enhanced_metric("Target Price", f"${metrics['Target Price']:.2f}", metric_name="Target Price")
-                            st.caption("💡 Analyst consensus target price - indicates expected future price")
-                            
-                            display_enhanced_metric("Beta", f"{metrics['Beta']:.2f}", metric_name="Beta")
-                        
-                        with col2:
-                            st.markdown("### 📊 Valuation")
-                            display_enhanced_metric("P/E Ratio", f"{metrics['P/E Ratio']:.2f}", metric_name="P/E Ratio")
-                            display_enhanced_metric("Forward P/E", f"{metrics['Forward P/E']:.2f}", metric_name="Forward P/E")
-                            display_enhanced_metric("PEG Ratio", f"{metrics['PEG Ratio']:.2f}", metric_name="PEG Ratio")
-                            display_enhanced_metric("Price/Book", f"{metrics['Price to Book']:.2f}", metric_name="Price to Book")
-                        
-                        with col3:
-                            st.markdown("### 💵 Returns")
-                            display_enhanced_metric("Dividend Yield", f"{metrics['Dividend Yield']:.2f}%", metric_name="Dividend Yield")
-                            display_enhanced_metric("ROE", f"{metrics['ROE']:.2f}%", metric_name="ROE")
-                            display_enhanced_metric("ROA", f"{metrics['ROA']:.2f}%", metric_name="ROA")
-                            st.markdown(f"**Analyst Rating:** {metrics['Analyst Rating'].upper()}")
-                            st.caption("💡 Consensus analyst recommendation: Buy, Hold, or Sell")
+                    # Render outcome sections with clickable boxes (same as Single Analysis)
+                    render_outcome_sections(
+                        ticker=ticker,
+                        data=data,
+                        metrics=metrics,
+                        score=score,
+                        forecast=forecast,
+                        intrinsic_value=intrinsic_value,
+                        news_articles=news_articles,
+                        ratings_result=ratings_result,
+                        trading_signals=trading_signals_data
+                    )
                     
-                    with tab3:
-                        st.markdown("### 💰 Financial Health Metrics")
-                        st.markdown("*Color-coded indicators: 🟢 Excellent | 🟡 Good | 🟠 Fair | 🔴 Poor*")
-                        
-                        chart = create_financial_metrics_chart(metrics)
-                        if chart:
-                            st.plotly_chart(chart, use_container_width=True)
-                        
-                        col1, col2, col3 = st.columns(3)
-                        
-                        with col1:
-                            st.markdown("#### 💰 Profitability")
-                            # Gross Margin
-                            gm = metrics['Gross Margin']
-                            gm_indicator = "🟢" if gm >= 40 else "🟡" if gm >= 20 else "🟠" if gm >= 10 else "🔴"
-                            gm_status = "Excellent" if gm >= 40 else "Good" if gm >= 20 else "Fair" if gm >= 10 else "Poor"
-                            st.markdown(f"""
-                            <div style="background-color: {'#e8f5e9' if gm >= 40 else '#fff9c4' if gm >= 20 else '#ffe0b2' if gm >= 10 else '#ffebee'}; 
-                                        padding: 15px; border-radius: 8px; border-left: 5px solid {'#4CAF50' if gm >= 40 else '#FFA726' if gm >= 20 else '#FF9800' if gm >= 10 else '#EF5350'}; 
-                                        margin-bottom: 10px;">
-                                <h4 style="margin: 0; color: {'#1B5E20' if gm >= 40 else '#F57F17' if gm >= 20 else '#E65100' if gm >= 10 else '#B71C1C'};">
-                                    {gm_indicator} Gross Margin: {gm:.2f}% - {gm_status}
-                                </h4>
-                            </div>
-                            """, unsafe_allow_html=True)
-                            display_enhanced_metric("Gross Margin", f"{gm:.2f}%", metric_name="Gross Margin")
-                            
-                            # Operating Margin
-                            om = metrics['Operating Margin']
-                            om_indicator = "🟢" if om >= 20 else "🟡" if om >= 10 else "🟠" if om >= 5 else "🔴"
-                            om_status = "Excellent" if om >= 20 else "Good" if om >= 10 else "Fair" if om >= 5 else "Poor"
-                            st.markdown(f"""
-                            <div style="background-color: {'#e8f5e9' if om >= 20 else '#fff9c4' if om >= 10 else '#ffe0b2' if om >= 5 else '#ffebee'}; 
-                                        padding: 15px; border-radius: 8px; border-left: 5px solid {'#4CAF50' if om >= 20 else '#FFA726' if om >= 10 else '#FF9800' if om >= 5 else '#EF5350'}; 
-                                        margin-bottom: 10px;">
-                                <h4 style="margin: 0; color: {'#1B5E20' if om >= 20 else '#F57F17' if om >= 10 else '#E65100' if om >= 5 else '#B71C1C'};">
-                                    {om_indicator} Operating Margin: {om:.2f}% - {om_status}
-                                </h4>
-                            </div>
-                            """, unsafe_allow_html=True)
-                            display_enhanced_metric("Operating Margin", f"{om:.2f}%", metric_name="Operating Margin")
-                            
-                            # Profit Margin
-                            pm = metrics['Profit Margin']
-                            pm_indicator = "🟢" if pm >= 15 else "🟡" if pm >= 5 else "🟠" if pm >= 2 else "🔴"
-                            pm_status = "Excellent" if pm >= 15 else "Good" if pm >= 5 else "Fair" if pm >= 2 else "Poor"
-                            st.markdown(f"""
-                            <div style="background-color: {'#e8f5e9' if pm >= 15 else '#fff9c4' if pm >= 5 else '#ffe0b2' if pm >= 2 else '#ffebee'}; 
-                                        padding: 15px; border-radius: 8px; border-left: 5px solid {'#4CAF50' if pm >= 15 else '#FFA726' if pm >= 5 else '#FF9800' if pm >= 2 else '#EF5350'}; 
-                                        margin-bottom: 10px;">
-                                <h4 style="margin: 0; color: {'#1B5E20' if pm >= 15 else '#F57F17' if pm >= 5 else '#E65100' if pm >= 2 else '#B71C1C'};">
-                                    {pm_indicator} Profit Margin: {pm:.2f}% - {pm_status}
-                                </h4>
-                            </div>
-                            """, unsafe_allow_html=True)
-                            display_enhanced_metric("Profit Margin", f"{pm:.2f}%", metric_name="Profit Margin")
-                        
-                        with col2:
-                            st.markdown("#### 📈 Growth")
-                            # Revenue Growth
-                            rg = metrics['Revenue Growth']
-                            rg_indicator = "🟢" if rg >= 15 else "🟡" if rg >= 5 else "🟠" if rg >= 0 else "🔴"
-                            rg_status = "Excellent" if rg >= 15 else "Good" if rg >= 5 else "Fair" if rg >= 0 else "Declining"
-                            st.markdown(f"""
-                            <div style="background-color: {'#e8f5e9' if rg >= 15 else '#fff9c4' if rg >= 5 else '#ffe0b2' if rg >= 0 else '#ffebee'}; 
-                                        padding: 15px; border-radius: 8px; border-left: 5px solid {'#4CAF50' if rg >= 15 else '#FFA726' if rg >= 5 else '#FF9800' if rg >= 0 else '#EF5350'}; 
-                                        margin-bottom: 10px;">
-                                <h4 style="margin: 0; color: {'#1B5E20' if rg >= 15 else '#F57F17' if rg >= 5 else '#E65100' if rg >= 0 else '#B71C1C'};">
-                                    {rg_indicator} Revenue Growth: {rg:+.2f}% - {rg_status}
-                                </h4>
-                            </div>
-                            """, unsafe_allow_html=True)
-                            display_enhanced_metric("Revenue Growth", f"{rg:+.2f}%", metric_name="Revenue Growth")
-                            
-                            # Earnings Growth
-                            eg = metrics['Earnings Growth']
-                            eg_indicator = "🟢" if eg >= 15 else "🟡" if eg >= 5 else "🟠" if eg >= 0 else "🔴"
-                            eg_status = "Excellent" if eg >= 15 else "Good" if eg >= 5 else "Fair" if eg >= 0 else "Declining"
-                            st.markdown(f"""
-                            <div style="background-color: {'#e8f5e9' if eg >= 15 else '#fff9c4' if eg >= 5 else '#ffe0b2' if eg >= 0 else '#ffebee'}; 
-                                        padding: 15px; border-radius: 8px; border-left: 5px solid {'#4CAF50' if eg >= 15 else '#FFA726' if eg >= 5 else '#FF9800' if eg >= 0 else '#EF5350'}; 
-                                        margin-bottom: 10px;">
-                                <h4 style="margin: 0; color: {'#1B5E20' if eg >= 15 else '#F57F17' if eg >= 5 else '#E65100' if eg >= 0 else '#B71C1C'};">
-                                    {eg_indicator} Earnings Growth: {eg:+.2f}% - {eg_status}
-                                </h4>
-                            </div>
-                            """, unsafe_allow_html=True)
-                            display_enhanced_metric("Earnings Growth", f"{eg:+.2f}%", metric_name="Earnings Growth")
-                        
-                        with col3:
-                            st.markdown("#### 🏦 Financial Strength")
-                            # Debt/Equity
-                            de = metrics['Debt to Equity']
-                            de_indicator = "🟢" if de <= 0.5 else "🟡" if de <= 1.5 else "🟠" if de <= 2.5 else "🔴"
-                            de_status = "Excellent" if de <= 0.5 else "Good" if de <= 1.5 else "Fair" if de <= 2.5 else "High Debt"
-                            st.markdown(f"""
-                            <div style="background-color: {'#e8f5e9' if de <= 0.5 else '#fff9c4' if de <= 1.5 else '#ffe0b2' if de <= 2.5 else '#ffebee'}; 
-                                        padding: 15px; border-radius: 8px; border-left: 5px solid {'#4CAF50' if de <= 0.5 else '#FFA726' if de <= 1.5 else '#FF9800' if de <= 2.5 else '#EF5350'}; 
-                                        margin-bottom: 10px;">
-                                <h4 style="margin: 0; color: {'#1B5E20' if de <= 0.5 else '#F57F17' if de <= 1.5 else '#E65100' if de <= 2.5 else '#B71C1C'};">
-                                    {de_indicator} Debt/Equity: {de:.2f} - {de_status}
-                                </h4>
-                            </div>
-                            """, unsafe_allow_html=True)
-                            display_enhanced_metric("Debt/Equity", f"{de:.2f}", metric_name="Debt to Equity")
-                            
-                            # Current Ratio
-                            cr = metrics['Current Ratio']
-                            cr_indicator = "🟢" if cr >= 1.5 else "🟡" if cr >= 1.0 else "🔴"
-                            cr_status = "Excellent" if cr >= 1.5 else "Adequate" if cr >= 1.0 else "Low Liquidity"
-                            st.markdown(f"""
-                            <div style="background-color: {'#e8f5e9' if cr >= 1.5 else '#fff9c4' if cr >= 1.0 else '#ffebee'}; 
-                                        padding: 15px; border-radius: 8px; border-left: 5px solid {'#4CAF50' if cr >= 1.5 else '#FFA726' if cr >= 1.0 else '#EF5350'}; 
-                                        margin-bottom: 10px;">
-                                <h4 style="margin: 0; color: {'#1B5E20' if cr >= 1.5 else '#F57F17' if cr >= 1.0 else '#B71C1C'};">
-                                    {cr_indicator} Current Ratio: {cr:.2f} - {cr_status}
-                                </h4>
-                            </div>
-                            """, unsafe_allow_html=True)
-                            display_enhanced_metric("Current Ratio", f"{cr:.2f}", metric_name="Current Ratio")
-                            
-                            # Quick Ratio
-                            qr = metrics['Quick Ratio']
-                            qr_indicator = "🟢" if qr >= 1.0 else "🟡" if qr >= 0.5 else "🔴"
-                            qr_status = "Excellent" if qr >= 1.0 else "Adequate" if qr >= 0.5 else "Low Liquidity"
-                            st.markdown(f"""
-                            <div style="background-color: {'#e8f5e9' if qr >= 1.0 else '#fff9c4' if qr >= 0.5 else '#ffebee'}; 
-                                        padding: 15px; border-radius: 8px; border-left: 5px solid {'#4CAF50' if qr >= 1.0 else '#FFA726' if qr >= 0.5 else '#EF5350'}; 
-                                        margin-bottom: 10px;">
-                                <h4 style="margin: 0; color: {'#1B5E20' if qr >= 1.0 else '#F57F17' if qr >= 0.5 else '#B71C1C'};">
-                                    {qr_indicator} Quick Ratio: {qr:.2f} - {qr_status}
-                                </h4>
-                            </div>
-                            """, unsafe_allow_html=True)
-                            display_enhanced_metric("Quick Ratio", f"{qr:.2f}", metric_name="Quick Ratio")
-                    
-                    with tab4:
-                        if show_technical and 'RSI' in data['history'].columns:
-                            st.markdown("### Technical Indicators")
-                            
-                            col1, col2 = st.columns(2)
-                            
-                            with col1:
-                                latest_rsi = data['history']['RSI'].iloc[-1]
-                                rsi_status = "Oversold" if latest_rsi < 30 else "Overbought" if latest_rsi > 70 else "Neutral"
-                                display_enhanced_metric("RSI (14)", f"{latest_rsi:.2f}", delta=rsi_status, metric_name="RSI")
-                                
-                                latest_macd = data['history']['MACD'].iloc[-1]
-                                latest_signal = data['history']['Signal'].iloc[-1]
-                                macd_trend = "Bullish" if latest_macd > latest_signal else "Bearish"
-                                display_enhanced_metric("MACD", f"{latest_macd:.2f}", delta=macd_trend, metric_name="MACD")
-                            
-                            with col2:
-                                current_price = data['history']['Close'].iloc[-1]
-                                sma_20 = data['history']['SMA_20'].iloc[-1]
-                                sma_50 = data['history']['SMA_50'].iloc[-1]
-                                
-                                ma_trend = "Above" if current_price > sma_20 else "Below"
-                                delta_color = "normal" if current_price > sma_20 else "inverse"
-                                st.metric("Price vs SMA 20", f"${current_price:.2f}", 
-                                        delta=f"{ma_trend} ${sma_20:.2f}", delta_color=delta_color)
-                                st.caption("💡 SMA 20: 20-day moving average. Price above = bullish trend, below = bearish trend")
-                                
-                                ma_trend_50 = "Above" if current_price > sma_50 else "Below"
-                                delta_color_50 = "normal" if current_price > sma_50 else "inverse"
-                                st.metric("Price vs SMA 50", f"${current_price:.2f}", 
-                                        delta=f"{ma_trend_50} ${sma_50:.2f}", delta_color=delta_color_50)
-                                st.caption("💡 SMA 50: 50-day moving average. Longer-term trend indicator. Above = long-term uptrend")
-                        else:
-                            st.info("Enable 'Show Technical Indicators' in settings to view technical analysis")
-                    
-                    with tab5:
-                        # Risk Analysis
-                        st.markdown("### ⚠️ Risk Analysis")
-                        st.markdown("*Color-coded risk levels: 🟢 Low Risk | 🟡 Moderate Risk | 🟠 High Risk | 🔴 Very High Risk*")
-                        
-                        hist = data.get('history')
-                        if hist is not None and len(hist) > 0:
-                            prices = hist['Close']
-                            import yfinance as yf
-                            market = yf.Ticker('SPY')
-                            market_hist = market.history(period=time_period)
-                            market_prices = market_hist['Close'] if len(market_hist) > 0 else None
-                            risk_metrics = risk_analyzer.comprehensive_risk_analysis(prices, market_prices)
-                            if risk_metrics:
-                                col1, col2, col3 = st.columns(3)
-                                with col1:
-                                    vol = risk_metrics.get('volatility', 0)
-                                    vol_indicator = "🟢" if vol < 20 else "🟡" if vol < 40 else "🟠" if vol < 60 else "🔴"
-                                    vol_status = "Low Risk" if vol < 20 else "Moderate Risk" if vol < 40 else "High Risk" if vol < 60 else "Very High Risk"
-                                    st.markdown(f"""
-                                    <div style="background-color: {'#e8f5e9' if vol < 20 else '#fff9c4' if vol < 40 else '#ffe0b2' if vol < 60 else '#ffebee'}; 
-                                                padding: 15px; border-radius: 8px; border-left: 5px solid {'#4CAF50' if vol < 20 else '#FFA726' if vol < 40 else '#FF9800' if vol < 60 else '#EF5350'}; 
-                                                margin-bottom: 10px;">
-                                        <h4 style="margin: 0; color: {'#1B5E20' if vol < 20 else '#F57F17' if vol < 40 else '#E65100' if vol < 60 else '#B71C1C'};">
-                                            {vol_indicator} Volatility: {vol:.2f}% - {vol_status}
-                                        </h4>
-                                    </div>
-                                    """, unsafe_allow_html=True)
-                                    display_enhanced_metric("Volatility", f"{vol:.2f}%", 
-                                                           help_text="💡 Annual price volatility. Under 20% is low (stable), 20-40% is moderate, over 40% is high volatility (risky).")
-                                    display_enhanced_metric("Beta", f"{risk_metrics.get('beta', 0):.2f}", metric_name="Beta")
-                                with col2:
-                                    sharpe = risk_metrics.get('sharpe_ratio', 0)
-                                    sharpe_indicator = "🟢" if sharpe >= 2.0 else "🟡" if sharpe >= 1.0 else "🟠" if sharpe >= 0.5 else "🔴"
-                                    sharpe_status = "Excellent" if sharpe >= 2.0 else "Good" if sharpe >= 1.0 else "Fair" if sharpe >= 0.5 else "Poor"
-                                    st.markdown(f"""
-                                    <div style="background-color: {'#e8f5e9' if sharpe >= 2.0 else '#fff9c4' if sharpe >= 1.0 else '#ffe0b2' if sharpe >= 0.5 else '#ffebee'}; 
-                                                padding: 15px; border-radius: 8px; border-left: 5px solid {'#4CAF50' if sharpe >= 2.0 else '#FFA726' if sharpe >= 1.0 else '#FF9800' if sharpe >= 0.5 else '#EF5350'}; 
-                                                margin-bottom: 10px;">
-                                        <h4 style="margin: 0; color: {'#1B5E20' if sharpe >= 2.0 else '#F57F17' if sharpe >= 1.0 else '#E65100' if sharpe >= 0.5 else '#B71C1C'};">
-                                            {sharpe_indicator} Sharpe Ratio: {sharpe:.2f} - {sharpe_status}
-                                        </h4>
-                                    </div>
-                                    """, unsafe_allow_html=True)
-                                    display_enhanced_metric("Sharpe Ratio", f"{sharpe:.2f}", metric_name="Sharpe Ratio")
-                                    mdd = risk_metrics.get('max_drawdown_pct', 0)
-                                    mdd_indicator = "🟢" if mdd > -15 else "🟡" if mdd > -30 else "🟠" if mdd > -50 else "🔴"
-                                    mdd_status = "Low Risk" if mdd > -15 else "Moderate Risk" if mdd > -30 else "High Risk" if mdd > -50 else "Very High Risk"
-                                    st.markdown(f"""
-                                    <div style="background-color: {'#e8f5e9' if mdd > -15 else '#fff9c4' if mdd > -30 else '#ffe0b2' if mdd > -50 else '#ffebee'}; 
-                                                padding: 15px; border-radius: 8px; border-left: 5px solid {'#4CAF50' if mdd > -15 else '#FFA726' if mdd > -30 else '#FF9800' if mdd > -50 else '#EF5350'}; 
-                                                margin-bottom: 10px;">
-                                        <h4 style="margin: 0; color: {'#1B5E20' if mdd > -15 else '#F57F17' if mdd > -30 else '#E65100' if mdd > -50 else '#B71C1C'};">
-                                            {mdd_indicator} Max Drawdown: {mdd:.2f}% - {mdd_status}
-                                        </h4>
-                                    </div>
-                                    """, unsafe_allow_html=True)
-                                    display_enhanced_metric("Max Drawdown", f"{mdd:.2f}%", 
-                                                           help_text="💡 Largest peak-to-trough decline. Under -15% is good, -15% to -30% is moderate, over -30% indicates high downside risk.")
-                                with col3:
-                                    var5 = risk_metrics.get('var_5pct', 0) * 100
-                                    var_indicator = "🟢" if abs(var5) < 5 else "🟡" if abs(var5) < 10 else "🟠" if abs(var5) < 20 else "🔴"
-                                    var_status = "Low Risk" if abs(var5) < 5 else "Moderate Risk" if abs(var5) < 10 else "High Risk" if abs(var5) < 20 else "Very High Risk"
-                                    st.markdown(f"""
-                                    <div style="background-color: {'#e8f5e9' if abs(var5) < 5 else '#fff9c4' if abs(var5) < 10 else '#ffe0b2' if abs(var5) < 20 else '#ffebee'}; 
-                                                padding: 15px; border-radius: 8px; border-left: 5px solid {'#4CAF50' if abs(var5) < 5 else '#FFA726' if abs(var5) < 10 else '#FF9800' if abs(var5) < 20 else '#EF5350'}; 
-                                                margin-bottom: 10px;">
-                                        <h4 style="margin: 0; color: {'#1B5E20' if abs(var5) < 5 else '#F57F17' if abs(var5) < 10 else '#E65100' if abs(var5) < 20 else '#B71C1C'};">
-                                            {var_indicator} VaR (5%): {var5:+.2f}% - {var_status}
-                                        </h4>
-                                    </div>
-                                    """, unsafe_allow_html=True)
-                                    st.markdown(f"**VaR (5%):** {var5:+.2f}%")
-                                    st.caption("💡 Value at Risk: Maximum expected loss with 95% confidence over given period")
-                    
-                    with tab6:
-                        # Valuation Analysis
-                        st.markdown("### 💎 Valuation Analysis")
-                        st.markdown("*Color-coded valuation: 🟢 Undervalued (Buy) | 🟡 Fair Value | 🔴 Overvalued (Sell)*")
-                        try:
-                            valuation_result = valuation.comprehensive_valuation(ticker, data['info'], metrics)
-                            if valuation_result:
-                                discount_premium = valuation_result.get('discount_premium', 0)
-                                col1, col2, col3 = st.columns(3)
-                                with col1:
-                                    st.markdown(f"**Intrinsic Value:** ${valuation_result['intrinsic_value']:.2f}")
-                                    st.caption("💡 Estimated true value based on fundamental analysis - what the stock should be worth")
-                                with col2:
-                                    st.markdown(f"**Market Price:** ${valuation_result['current_price']:.2f}")
-                                    st.caption("💡 The current trading price of the stock")
-                                with col3:
-                                    if discount_premium > 20:
-                                        status_emoji = "🟢"
-                                        status_color = "#4CAF50"
-                                        status_bg = "#e8f5e9"
-                                        status_text = "#1B5E20"
-                                        status_label = "Strong Buy Opportunity"
-                                    elif discount_premium > 10:
-                                        status_emoji = "🟢"
-                                        status_color = "#4CAF50"
-                                        status_bg = "#e8f5e9"
-                                        status_text = "#1B5E20"
-                                        status_label = "Buy Opportunity"
-                                    elif discount_premium > -10:
-                                        status_emoji = "🟡"
-                                        status_color = "#FFA726"
-                                        status_bg = "#fff9c4"
-                                        status_text = "#F57F17"
-                                        status_label = "Fair Value"
-                                    elif discount_premium > -20:
-                                        status_emoji = "🟠"
-                                        status_color = "#FF9800"
-                                        status_bg = "#ffe0b2"
-                                        status_text = "#E65100"
-                                        status_label = "Caution - Overvalued"
-                                    else:
-                                        status_emoji = "🔴"
-                                        status_color = "#EF5350"
-                                        status_bg = "#ffebee"
-                                        status_text = "#B71C1C"
-                                        status_label = "Significantly Overvalued"
-                                    
-                                    st.markdown(f"""
-                                    <div style="background-color: {status_bg}; 
-                                                padding: 15px; border-radius: 8px; border-left: 5px solid {status_color}; 
-                                                margin-bottom: 10px;">
-                                        <h4 style="margin: 0; color: {status_text};">
-                                            {status_emoji} Valuation Gap: {discount_premium:+.1f}% - {status_label}
-                                        </h4>
-                                    </div>
-                                    """, unsafe_allow_html=True)
-                                    st.markdown(f"**Status:** {status_emoji} {valuation_result['valuation_status']}")
-                                    st.caption("💡 Overall valuation assessment based on multiple valuation methods")
-                        except:
-                            st.info("Valuation data not available")
-                    
-                    with tab7:
-                        # Ratings Summary
-                        st.markdown("### ⭐ Ratings Summary")
-                        st.markdown("*Color-coded ratings: 🟢 Strong Buy/Buy | 🟡 Hold | 🔴 Sell*")
-                        try:
-                            ratings_result = ratings_agg.aggregate_ratings(ticker, score, data['info'])
-                            if ratings_result:
-                                composite = ratings_result['composite_rating']
-                                avg_score = ratings_result['average_rating_score']
-                                
-                                col1, col2 = st.columns(2)
-                                with col1:
-                                    if "STRONG BUY" in composite.upper() or "BUY" in composite.upper():
-                                        rating_emoji = "🟢"
-                                        rating_color = "#4CAF50"
-                                        rating_bg = "#e8f5e9"
-                                        rating_text = "#1B5E20"
-                                        rating_status = "Buy"
-                                    elif "SELL" in composite.upper():
-                                        rating_emoji = "🔴"
-                                        rating_color = "#EF5350"
-                                        rating_bg = "#ffebee"
-                                        rating_text = "#B71C1C"
-                                        rating_status = "Sell"
-                                    else:
-                                        rating_emoji = "🟡"
-                                        rating_color = "#FFA726"
-                                        rating_bg = "#fff9c4"
-                                        rating_text = "#F57F17"
-                                        rating_status = "Hold"
-                                    
-                                    st.markdown(f"""
-                                    <div style="background-color: {rating_bg}; 
-                                                padding: 15px; border-radius: 8px; border-left: 5px solid {rating_color}; 
-                                                margin-bottom: 10px;">
-                                        <h4 style="margin: 0; color: {rating_text};">
-                                            {rating_emoji} Composite Rating: {composite} - {rating_status}
-                                        </h4>
-                                    </div>
-                                    """, unsafe_allow_html=True)
-                                    st.caption("💡 Aggregated rating from multiple analyst sources - overall consensus recommendation")
-                                with col2:
-                                    if avg_score >= 4.0:
-                                        score_indicator = "🟢"
-                                        score_status = "Excellent"
-                                        score_color = "#4CAF50"
-                                        score_bg = "#e8f5e9"
-                                        score_text = "#1B5E20"
-                                    elif avg_score >= 3.0:
-                                        score_indicator = "🟡"
-                                        score_status = "Good"
-                                        score_color = "#FFA726"
-                                        score_bg = "#fff9c4"
-                                        score_text = "#F57F17"
-                                    elif avg_score >= 2.0:
-                                        score_indicator = "🟠"
-                                        score_status = "Fair"
-                                        score_color = "#FF9800"
-                                        score_bg = "#ffe0b2"
-                                        score_text = "#E65100"
-                                    else:
-                                        score_indicator = "🔴"
-                                        score_status = "Poor"
-                                        score_color = "#EF5350"
-                                        score_bg = "#ffebee"
-                                        score_text = "#B71C1C"
-                                    
-                                    st.markdown(f"""
-                                    <div style="background-color: {score_bg}; 
-                                                padding: 15px; border-radius: 8px; border-left: 5px solid {score_color}; 
-                                                margin-bottom: 10px;">
-                                        <h4 style="margin: 0; color: {score_text};">
-                                            {score_indicator} Average Score: {avg_score:.2f}/5.0 - {score_status}
-                                        </h4>
-                                    </div>
-                                    """, unsafe_allow_html=True)
-                                    st.caption("💡 Average rating score across all sources (5.0 = Strong Buy, 1.0 = Strong Sell)")
-                                
-                                if len(ratings_result['ratings_df']) > 0:
-                                    st.markdown("---")
-                                    st.markdown("#### 📊 Ratings by Source")
-                                    st.dataframe(ratings_result['ratings_df'][['source', 'rating', 'rating_score']], 
-                                              use_container_width=True, hide_index=True)
-                        except:
-                            st.info("Ratings data not available")
-                    
-                    with tab8:
-                        # Peer Benchmarking
-                        st.markdown("### 🔗 Peer Benchmarking")
-                        try:
-                            peers = peer_bench.get_sector_peers(ticker, data['info'].get('sector'))
-                            if peers:
-                                benchmark_result = peer_bench.benchmark_against_peers(ticker, metrics, score, peers)
-                                if benchmark_result and benchmark_result.get('benchmark_summary'):
-                                    summary = benchmark_result['benchmark_summary']
-                                    st.metric("Peer Rank", f"{summary['position']}/{summary['total_peers']}")
-                                    st.metric("Percentile", f"{summary['percentile']:.0f}th")
-                                if benchmark_result and len(benchmark_result.get('peer_comparison', [])) > 0:
-                                    comp_df = benchmark_result['peer_comparison'][['ticker', 'score', 'pe_ratio', 'roe']].head(5)
-                                    comp_df.columns = ['Ticker', 'Score', 'P/E', 'ROE']
-                                    st.dataframe(comp_df, use_container_width=True, hide_index=True)
-                        except:
-                            st.info("Peer data not available")
-                    
-                    with tab9:
-                        # Top News for Stock
-                        st.markdown("### 📰 Top News for {}".format(ticker.upper()))
-                        st.markdown("*Latest news articles and market updates related to this stock*")
-                        
-                        try:
-                            with st.spinner(f"Fetching latest news for {ticker}..."):
-                                # Get top news articles
-                                news_limit = st.slider("Number of articles to display", 5, 20, 10, key=f"news_limit_{ticker}")
-                                news_articles = news_market.get_stock_news(ticker, limit=news_limit)
-                                
-                                if news_articles and len(news_articles) > 0:
-                                    st.success(f"✅ Found {len(news_articles)} news article(s)")
-                                    
-                                    # Display news articles
-                                    for idx, article in enumerate(news_articles, 1):
-                                        # Determine article importance/recency
-                                        time_ago = ""
-                                        published_dt = article.get('published')
-                                        
-                                        if published_dt:
-                                            # Handle timezone-aware vs naive datetimes
-                                            try:
-                                                # Get current time (timezone-aware if published_dt is aware)
-                                                now = datetime.now(published_dt.tzinfo) if published_dt.tzinfo else datetime.now()
-                                                # If published_dt is aware but now is naive, make now aware
-                                                if published_dt.tzinfo and not now.tzinfo:
-                                                    from datetime import timezone
-                                                    now = datetime.now(timezone.utc).replace(tzinfo=None)
-                                                    published_dt = published_dt.replace(tzinfo=None)
-                                                # If published_dt is naive but now is aware, make published_dt aware
-                                                elif now.tzinfo and not published_dt.tzinfo:
-                                                    from datetime import timezone
-                                                    published_dt = published_dt.replace(tzinfo=timezone.utc)
-                                                
-                                                time_diff = now - published_dt
-                                                
-                                                if time_diff.days == 0:
-                                                    hours = time_diff.seconds // 3600
-                                                    if hours == 0:
-                                                        minutes = time_diff.seconds // 60
-                                                        time_ago = f" ({minutes} minutes ago)"
-                                                    else:
-                                                        time_ago = f" ({hours} hour{'s' if hours > 1 else ''} ago)"
-                                                elif time_diff.days == 1:
-                                                    time_ago = " (1 day ago)"
-                                                else:
-                                                    time_ago = f" ({time_diff.days} days ago)"
-                                            except Exception:
-                                                # If datetime comparison fails, just skip time_ago
-                                                time_ago = ""
-                                        
-                                        # Color code based on recency
-                                        if published_dt:
-                                            try:
-                                                # Get current time (timezone-aware if published_dt is aware)
-                                                now = datetime.now(published_dt.tzinfo) if published_dt.tzinfo else datetime.now()
-                                                # If published_dt is aware but now is naive, make now aware
-                                                if published_dt.tzinfo and not now.tzinfo:
-                                                    from datetime import timezone
-                                                    now = datetime.now(timezone.utc).replace(tzinfo=None)
-                                                    published_dt = published_dt.replace(tzinfo=None)
-                                                # If published_dt is naive but now is aware, make published_dt aware
-                                                elif now.tzinfo and not published_dt.tzinfo:
-                                                    from datetime import timezone
-                                                    published_dt = published_dt.replace(tzinfo=timezone.utc)
-                                                
-                                                time_diff = now - published_dt
-                                                
-                                                if time_diff.days == 0:
-                                                    border_color = "#4CAF50"  # Green for today
-                                                    bg_color = "#e8f5e9"
-                                                    recency_label = "🟢 Today"
-                                                elif time_diff.days <= 7:
-                                                    border_color = "#FFA726"  # Orange for this week
-                                                    bg_color = "#fff9c4"
-                                                    recency_label = "🟡 This Week"
-                                                else:
-                                                    border_color = "#90CAF9"  # Blue for older
-                                                    bg_color = "#e3f2fd"
-                                                    recency_label = "🔵 Older"
-                                            except Exception:
-                                                # Default if datetime comparison fails
-                                                border_color = "#BDBDBD"
-                                                bg_color = "#F5F5F5"
-                                                recency_label = "⚪ Unknown"
-                                        else:
-                                            border_color = "#BDBDBD"
-                                            bg_color = "#F5F5F5"
-                                            recency_label = "⚪ Unknown"
-                                        
-                                        # Use Streamlit native components for readable text
-                                        title = article.get('title', 'No title')
-                                        publisher = article.get('publisher', 'Unknown')
-                                        summary = article.get('summary', 'No summary available')
-                                        link = article.get('link', '#')
-                                        published_date = article['published'].strftime('%Y-%m-%d %H:%M') if article.get('published') else None
-                                        
-                                        # Display article using Streamlit expander for better UX
-                                        with st.expander(f"{recency_label} 📄 {title}", expanded=(idx == 1)):
-                                            # Publisher and date info
-                                            col_info1, col_info2 = st.columns([2, 1])
-                                            with col_info1:
-                                                st.write(f"**Publisher:** {publisher}{time_ago}")
-                                            with col_info2:
-                                                if published_date:
-                                                    st.write(f"**Published:** {published_date}")
-                                                else:
-                                                    st.write("**Published:** Unknown date")
-                                            
-                                            # Summary
-                                            st.write("**Summary:**")
-                                            st.write(summary)
-                                            
-                                            # Link to full article
-                                            if link and link != '#':
-                                                st.markdown(f"[🔗 Read Full Article →]({link})")
-                                            
-                                            # Add visual separator with recency indicator
-                                            st.markdown(f"<div style='height: 2px; background: linear-gradient(to right, {border_color}, transparent); margin: 10px 0;'></div>", unsafe_allow_html=True)
-                                        
-                                        # Add separator between articles (except last one)
-                                        if idx < len(news_articles):
-                                            st.markdown("---")
-                                elif news_articles is not None and len(news_articles) == 0:
-                                    st.warning(f"⚠️ No news articles found for {ticker}.")
-                                    st.info("💡 This may be due to limited news coverage for this stock.")
-                                else:
-                                    st.warning(f"⚠️ Unable to fetch news for {ticker}.")
-                                    st.info("💡 News data may not be available for this stock. This could be due to:\n"
-                                          "- Limited coverage from news sources\n"
-                                          "- Newly listed stock\n"
-                                          "- Data source limitations")
-                        except Exception as e:
-                            st.error(f"Error fetching news: {str(e)}")
-                            st.info("💡 News data may be temporarily unavailable. Please try again later.")
-        
-            # Export options
-            st.markdown("---")
-            st.subheader("💾 Export Results")
-            
-            csv = summary_df.to_csv(index=False)
-            st.download_button(
-                label="📥 Download Screener Results",
-                data=csv,
-                file_name=f"screener_results_{datetime.now().strftime('%Y%m%d')}.csv",
-                mime="text/csv",
-                key="download_screener_results"
-            )
-        else:
-            st.warning("⚠️ No stocks matched the specified criteria")
+                    st.markdown("---")
+                # Export options
+                st.markdown("---")
+                st.subheader("💾 Export Results")
+                
+                csv = summary_df.to_csv(index=False)
+                st.download_button(
+                    label="📥 Download Screener Results",
+                    data=csv,
+                    file_name=f"screener_results_{datetime.now().strftime('%Y%m%d')}.csv",
+                    mime="text/csv",
+                    key="download_screener_results"
+                )
+            else:
+                st.warning("⚠️ No stocks matched the specified criteria")
 
 with tab_portfolio:
     st.markdown("### 💼 Portfolio Analyzer")
@@ -1190,7 +506,7 @@ with tab_portfolio:
     st.markdown("**Supported formats:**")
     st.markdown("- **IBKR CSV:** Paste directly from IBKR (Symbol, Quantity columns)")
     st.markdown("- **Simple format:** `TICKER:SHARES` or `TICKER SHARES` (comma-separated)")
-    st.markdown("- **Example:** `AAPL:10, MSFT:5, GOOGL:3` or `AAPL 10, MSFT 5, GOOGL 3`")
+    st.markdown("- **Example:** `AAPL:10, Apple:5, Microsoft 3` or `AAPL 10, MSFT 5`")
     
     portfolio_input = st.text_area(
         "Portfolio Holdings:",
@@ -1751,7 +1067,7 @@ with tab_portfolio:
                                 plot_bgcolor='rgba(0,0,0,0)',
                                 paper_bgcolor='rgba(0,0,0,0)'
                             )
-                            st.plotly_chart(fig, use_container_width=True)
+                            st.plotly_chart(fig, width="stretch")
                     
                     # Sector Allocation
                     if portfolio_metrics['sector_allocation']:
@@ -1925,5 +1241,179 @@ with tab_portfolio:
                         mime="application/json",
                         key=unique_key_json
                     )
+
+with tab_risk:
+    st.markdown("### 📊 Portfolio Risk Dashboard")
+    st.write("Professional risk analysis: VaR, correlation, stress testing, and risk metrics")
+    
+    from utils.portfolio_risk import PortfolioRiskManager
+    
+    if 'risk_manager' not in st.session_state:
+        st.session_state.risk_manager = PortfolioRiskManager()
+    
+    risk_manager = st.session_state.risk_manager
+    
+    st.markdown("---")
+    
+    # Portfolio input
+    st.markdown("#### 📝 Enter Portfolio Positions")
+    st.caption("Enter your portfolio positions to analyze risk metrics")
+    
+    num_positions = st.number_input("Number of Positions", min_value=1, max_value=50, value=3, step=1)
+    
+    positions = []
+    for i in range(num_positions):
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            ticker = st.text_input(f"Ticker or Name {i+1}", key=f"risk_ticker_{i}", placeholder="e.g., AAPL or Apple")
+        with col2:
+            shares = st.number_input(f"Shares {i+1}", min_value=0.0, value=100.0, step=1.0, key=f"risk_shares_{i}")
+        with col3:
+            entry_price = st.number_input(f"Entry Price {i+1}", min_value=0.0, value=100.0, step=0.01, key=f"risk_entry_{i}")
+        
+        if ticker:
+            from utils.ticker_resolver import resolve_to_ticker
+            resolved = resolve_to_ticker(ticker) or ticker.upper()
+            try:
+                stock = yf.Ticker(resolved)
+                current_price = stock.history(period="1d")['Close'].iloc[-1] if len(stock.history(period="1d")) > 0 else entry_price
+            except:
+                current_price = entry_price
+            
+            positions.append({
+                'ticker': resolved,
+                'shares': shares,
+                'entry_price': entry_price,
+                'current_price': current_price
+            })
+    
+    if st.button("🔍 Analyze Portfolio Risk", use_container_width=True):
+        if positions:
+            with st.spinner("Calculating risk metrics..."):
+                # Portfolio metrics
+                portfolio_metrics = risk_manager.calculate_portfolio_metrics(positions)
+                
+                if portfolio_metrics:
+                    st.markdown("---")
+                    st.markdown("### 💼 Portfolio Overview")
+                    
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        st.metric("Total Value", f"${portfolio_metrics['total_value']:,.2f}")
+                    with col2:
+                        st.metric("Total Cost", f"${portfolio_metrics['total_cost']:,.2f}")
+                    with col3:
+                        st.metric("Total P&L", f"${portfolio_metrics['total_pnl']:,.2f}", 
+                                 f"{portfolio_metrics['total_pnl_pct']:.2f}%")
+                    with col4:
+                        st.metric("Positions", portfolio_metrics['num_positions'])
+                    
+                    # Position breakdown
+                    st.markdown("---")
+                    st.markdown("### 📊 Position Breakdown")
+                    pos_df = pd.DataFrame(portfolio_metrics['positions'])
+                    pos_df['Weight %'] = pos_df['weight'].apply(lambda x: f"{x:.2f}%")
+                    pos_df['Value'] = pos_df['value'].apply(lambda x: f"${x:,.2f}")
+                    pos_df['P&L'] = pos_df['pnl'].apply(lambda x: f"${x:,.2f}")
+                    pos_df['P&L %'] = pos_df['pnl_pct'].apply(lambda x: f"{x:.2f}%")
+                    display_df = pos_df[['ticker', 'Weight %', 'Value', 'P&L', 'P&L %']]
+                    st.dataframe(display_df, use_container_width=True, hide_index=True)
+                    
+                    # VaR Calculation
+                    st.markdown("---")
+                    st.markdown("### ⚠️ Value at Risk (VaR)")
+                    
+                    var_95 = risk_manager.calculate_var(positions, confidence_level=0.95, time_horizon=1)
+                    var_99 = risk_manager.calculate_var(positions, confidence_level=0.99, time_horizon=1)
+                    
+                    if var_95:
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.markdown("#### 95% Confidence (1 Day)")
+                            st.metric("VaR (Parametric)", f"${var_95['var_dollar']:,.2f}", f"{var_95['var_percentage']:.2f}%")
+                            st.metric("VaR (Historical)", f"${var_95['historical_var_dollar']:,.2f}", f"{var_95['historical_var_percentage']:.2f}%")
+                            st.caption("💡 Maximum expected loss with 95% confidence over 1 day")
+                        
+                        with col2:
+                            st.markdown("#### 99% Confidence (1 Day)")
+                            if var_99:
+                                st.metric("VaR (Parametric)", f"${var_99['var_dollar']:,.2f}", f"{var_99['var_percentage']:.2f}%")
+                                st.metric("VaR (Historical)", f"${var_99['historical_var_dollar']:,.2f}", f"{var_99['historical_var_percentage']:.2f}%")
+                                st.caption("💡 Maximum expected loss with 99% confidence over 1 day")
+                        
+                        st.info(f"📊 Portfolio Volatility: {var_95['portfolio_volatility']:.2f}% (Annualized)")
+                    
+                    # Correlation Matrix
+                    st.markdown("---")
+                    st.markdown("### 🔗 Correlation Analysis")
+                    tickers = [p['ticker'] for p in positions]
+                    corr_matrix = risk_manager.calculate_correlation_matrix(tickers)
+                    
+                    if corr_matrix is not None and not corr_matrix.empty:
+                        st.dataframe(corr_matrix.style.background_gradient(cmap='RdYlGn', vmin=-1, vmax=1).format("{:.2f}"),
+                                   use_container_width=True)
+                        st.caption("💡 Correlation ranges from -1 (inverse) to +1 (perfect correlation). Lower correlation = better diversification.")
+                    
+                    # Beta Analysis
+                    st.markdown("---")
+                    st.markdown("### 📈 Beta Analysis")
+                    beta_analysis = risk_manager.calculate_portfolio_beta(positions)
+                    
+                    if beta_analysis:
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Portfolio Beta", f"{beta_analysis['beta']:.2f}")
+                            st.caption(f"vs {beta_analysis['benchmark_ticker']}")
+                        with col2:
+                            st.metric("Alpha", f"{beta_analysis['alpha']:.2f}%")
+                            st.caption("Risk-adjusted return")
+                        with col3:
+                            st.metric("Portfolio Volatility", f"{beta_analysis['portfolio_volatility']:.2f}%")
+                            st.caption("Annualized")
+                    
+                    # Sharpe Ratio
+                    st.markdown("---")
+                    st.markdown("### 📊 Risk-Adjusted Returns")
+                    sharpe_metrics = risk_manager.calculate_sharpe_ratio(positions)
+                    
+                    if sharpe_metrics:
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            st.metric("Sharpe Ratio", f"{sharpe_metrics['sharpe_ratio']:.2f}")
+                            st.caption("Higher is better (>1 is good)")
+                        with col2:
+                            st.metric("Sortino Ratio", f"{sharpe_metrics['sortino_ratio']:.2f}")
+                            st.caption("Downside risk adjusted")
+                        with col3:
+                            st.metric("Annual Return", f"{sharpe_metrics['annualized_return']:.2f}%")
+                        with col4:
+                            st.metric("Annual Volatility", f"{sharpe_metrics['annualized_volatility']:.2f}%")
+                    
+                    # Stress Testing
+                    st.markdown("---")
+                    st.markdown("### 💥 Stress Testing")
+                    scenarios = {
+                        'Market Crash (-20%)': -0.20,
+                        'Correction (-10%)': -0.10,
+                        'Rally (+10%)': 0.10,
+                        'Bull Run (+20%)': 0.20
+                    }
+                    
+                    stress_results = risk_manager.stress_test(positions, scenarios)
+                    
+                    if stress_results:
+                        stress_df = pd.DataFrame([
+                            {
+                                'Scenario': name,
+                                'Stressed Value': f"${r['stressed_value']:,.2f}",
+                                'P&L Change': f"${r['pnl_change']:,.2f}",
+                                'P&L Change %': f"{r['pnl_change_pct']:.2f}%"
+                            }
+                            for name, r in stress_results.items()
+                        ])
+                        st.dataframe(stress_df, use_container_width=True, hide_index=True)
+                        st.caption("💡 Impact of different market scenarios on portfolio value")
+        else:
+            st.warning("⚠️ Please enter at least one position")
 
 render_footer()

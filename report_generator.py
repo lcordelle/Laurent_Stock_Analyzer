@@ -70,7 +70,7 @@ class StockReportGenerator:
         story = []
         
         # Title page
-        story.append(Paragraph("VirtualFusion Stock Analyzer", self.styles['CustomTitle']))
+        story.append(Paragraph("Laurent Stock Analyzer", self.styles['CustomTitle']))
         story.append(Spacer(1, 12))
         
         company_name = data['info'].get('longName', ticker)
@@ -250,7 +250,7 @@ class StockReportGenerator:
         story.append(Paragraph("Disclaimer", self.styles['SubSection']))
         disclaimer = """This report is for informational purposes only and does not constitute financial advice. 
         Past performance is not indicative of future results. Please consult with a qualified financial advisor 
-        before making investment decisions. VirtualFusion is not responsible for any investment losses."""
+        before making investment decisions. Laurent is not responsible for any investment losses."""
         story.append(Paragraph(disclaimer, self.styles['Normal']))
         
         # Build PDF
@@ -306,7 +306,7 @@ class StockReportGenerator:
         story = []
         
         # Title
-        story.append(Paragraph("VirtualFusion Stock Analyzer", self.styles['CustomTitle']))
+        story.append(Paragraph("Laurent Stock Analyzer", self.styles['CustomTitle']))
         story.append(Spacer(1, 12))
         story.append(Paragraph("Multi-Stock Comparison Report", self.styles['CustomTitle']))
         story.append(Spacer(1, 12))

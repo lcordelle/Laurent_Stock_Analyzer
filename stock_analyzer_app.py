@@ -261,6 +261,17 @@ def create_price_chart(data):
     
     fig = go.Figure()
     
+    # Calculate support and resistance
+    window = 20
+    if len(hist) >= window:
+        recent_highs = hist['High'].rolling(window=window).max()
+        recent_lows = hist['Low'].rolling(window=window).min()
+        resistance = recent_highs.max()
+        support = recent_lows.min()
+    else:
+        resistance = None
+        support = None
+    
     # Candlestick chart
     fig.add_trace(go.Candlestick(
         x=hist.index,
@@ -278,6 +289,121 @@ def create_price_chart(data):
     if 'SMA_50' in hist.columns:
         fig.add_trace(go.Scatter(x=hist.index, y=hist['SMA_50'], 
                                 name='SMA 50', line=dict(color='blue', width=1)))
+    
+    # Import the function to identify support/resistance points
+    from utils.visualizations import identify_support_resistance_points
+    
+    # Identify support/resistance interaction points
+    support_bounces, support_breaks, resistance_rejections = identify_support_resistance_points(
+        hist, support, resistance
+    )
+    
+    # Add support line with markers
+    if support:
+        fig.add_hline(
+            y=support,
+            line_dash="solid",
+            line_color="#9333ea",  # Purple
+            line_width=2,
+            annotation_text=f"Support: ${support:.2f}",
+            annotation_position="left",
+            annotation_font=dict(size=11, color="#9333ea", family="Arial"),
+            opacity=0.9
+        )
+        
+        # Add support bounce markers (green circles)
+        if support_bounces:
+            bounce_dates = [b['date'] for b in support_bounces]
+            bounce_prices = [b['price'] for b in support_bounces]
+            fig.add_trace(go.Scatter(
+                x=bounce_dates,
+                y=bounce_prices,
+                mode='markers+text',
+                name='Support',
+                marker=dict(
+                    size=15,
+                    color='#10b981',
+                    symbol='circle',
+                    line=dict(width=3, color='white'),
+                    opacity=0.9
+                ),
+                text=['Support'] * len(bounce_dates),
+                textposition='bottom center',
+                textfont=dict(size=11, color='#10b981', family='Arial Black'),
+                showlegend=False,
+                hovertemplate='<b>Support</b><br>Date: %{x}<br>Price: $%{y:.2f}<extra></extra>'
+            ))
+        
+        # Add support break markers (red circles)
+        if support_breaks:
+            break_dates = [b['date'] for b in support_breaks]
+            break_prices = [b['price'] for b in support_breaks]
+            fig.add_trace(go.Scatter(
+                x=break_dates,
+                y=break_prices,
+                mode='markers+text',
+                name='Break in Support',
+                marker=dict(
+                    size=18,
+                    color='#ef4444',
+                    symbol='circle',
+                    line=dict(width=3, color='white'),
+                    opacity=0.9
+                ),
+                text=['Break in Support'] * len(break_dates),
+                textposition='top center',
+                textfont=dict(size=11, color='#ef4444', family='Arial Black'),
+                showlegend=False,
+                hovertemplate='<b>Break in Support</b><br>Date: %{x}<br>Price: $%{y:.2f}<extra></extra>'
+            ))
+    
+    # Add bold red resistance line with enhanced visibility
+    if resistance:
+        fig.add_hline(
+            y=resistance,
+            line_dash="solid",
+            line_color="#ef4444",  # Red
+            line_width=4,  # Thicker line for better visibility
+            annotation_text=f"RESISTANCE: ${resistance:.2f}",
+            annotation_position="right",
+            annotation_font=dict(
+                size=14,  # Larger font
+                color="#ef4444", 
+                family="Arial Black"
+            ),
+            annotation_bgcolor="rgba(255, 255, 255, 0.95)",  # White background for text readability
+            annotation_bordercolor="#ef4444",
+            annotation_borderwidth=2,
+            annotation_borderpad=4,
+            opacity=1.0
+        )
+        
+        # Add resistance rejection markers (red circles with bold styling for maximum visibility)
+        if resistance_rejections:
+            reject_dates = [r['date'] for r in resistance_rejections]
+            reject_prices = [r['price'] for r in resistance_rejections]
+            fig.add_trace(go.Scatter(
+                x=reject_dates,
+                y=reject_prices,
+                mode='markers+text',
+                name='RESISTANCE',
+                marker=dict(
+                    size=24,  # Even larger for maximum visibility
+                    color='#ef4444',  # Red to match resistance line
+                    symbol='circle',
+                    line=dict(width=5, color='white'),  # Very thick white border for contrast
+                    opacity=1.0  # Fully opaque
+                ),
+                text=['RESISTANCE'] * len(reject_dates),
+                textposition='top center',
+                textfont=dict(
+                    size=14,  # Larger, more readable font
+                    color='#ef4444',  # Red
+                    family='Arial Black'
+                ),
+                showlegend=False,
+                hovertemplate='<b>RESISTANCE REJECTION</b><br>Date: %{x}<br>Price: $%{y:.2f}<br>Price rejected at resistance level<extra></extra>'
+            ))
     
     fig.update_layout(
         title=f'{ticker} Price Chart',

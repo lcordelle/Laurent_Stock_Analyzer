@@ -14,7 +14,7 @@ class AlphaVantageClient:
     """Client for fetching data from Alpha Vantage API"""
     
     def __init__(self, api_key=None):
-        self.api_key = api_key or os.environ.get('ALPHA_VANTAGE_API_KEY', '0SD4K06XAEF1P5DI')
+        self.api_key = api_key or os.environ.get('ALPHA_VANTAGE_API_KEY', '')
         self.base_url = 'https://www.alphavantage.co/query'
         self.last_request_time = 0
         self.min_request_interval = 12.1  # Alpha Vantage free tier: 5 calls/min = 12 seconds between calls
@@ -39,8 +39,9 @@ class AlphaVantageClient:
             'datatype': 'json'
         })
         
-        # Build full URL for debugging
-        full_url = f"{self.base_url}?function={function}&symbol={symbol}&apikey={self.api_key[:8]}...&datatype=json"
+        # Build full URL for debugging (mask API key)
+        key_preview = f"{self.api_key[:8]}..." if self.api_key else "(not set)"
+        full_url = f"{self.base_url}?function={function}&symbol={symbol}&apikey={key_preview}&datatype=json"
         print(f"[Alpha Vantage] Request: {full_url}", file=__import__('sys').stderr)
         
         try:

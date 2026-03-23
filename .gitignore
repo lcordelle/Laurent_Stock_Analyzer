@@ -30,6 +30,7 @@ Thumbs.db
 
 # Logs
 *.log
+logs/
 
 # Build files
 dist/
@@ -39,4 +40,9 @@ build/
 # Temporary files
 *.tmp
 *.bak
+
+# Secrets (never commit)
+.env
+.env.local
+.env.*.local
 

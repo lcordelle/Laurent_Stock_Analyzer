@@ -4,6 +4,7 @@ Analyzes user's stock portfolio with comprehensive metrics
 """
 
 import yfinance as yf
+from utils.ticker_resolver import resolve_to_ticker
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
@@ -130,14 +131,10 @@ class PortfolioAnalyzer:
                             if shares <= 0:
                                 continue
                             
-                            # If ticker is valid, add to holdings
-                            # Allow alphanumeric and some special chars (like hyphens)
-                            if ticker and (ticker.replace('-', '').isalnum() or len(ticker) <= 5):
-                                # If ticker already exists, add shares
-                                if ticker in holdings:
-                                    holdings[ticker] += shares
-                                else:
-                                    holdings[ticker] = shares
+                            # Resolve ticker or company name to symbol
+                            resolved = resolve_to_ticker(ticker) or ticker
+                            if resolved and (resolved.replace('-', '').replace('.', '').isalnum() or len(resolved) <= 6):
+                                holdings[resolved] = holdings.get(resolved, 0) + shares
                         except (ValueError, TypeError):
                             continue
                     except Exception as e:
@@ -190,11 +187,9 @@ class PortfolioAnalyzer:
                                     if shares <= 0:
                                         continue
                                     
-                                    if ticker and (ticker.replace('-', '').isalnum() or len(ticker) <= 5):
-                                        if ticker in temp_holdings:
-                                            temp_holdings[ticker] += shares
-                                        else:
-                                            temp_holdings[ticker] = shares
+                                    resolved = resolve_to_ticker(ticker) or ticker
+                                    if resolved and (resolved.replace('-', '').replace('.', '').isalnum() or len(resolved) <= 6):
+                                        temp_holdings[resolved] = temp_holdings.get(resolved, 0) + shares
                                 except (ValueError, TypeError):
                                     continue
                             except:
@@ -228,10 +223,9 @@ class PortfolioAnalyzer:
                                         if ticker and shares > 0:
                                             if '.' in ticker:
                                                 ticker = ticker.split('.')[0]
-                                            if ticker not in holdings:
-                                                holdings[ticker] = shares
-                                            else:
-                                                holdings[ticker] += shares
+                                            resolved = resolve_to_ticker(ticker) or ticker
+                                            if resolved:
+                                                holdings[resolved] = holdings.get(resolved, 0) + shares
                             except:
                                 continue
             
@@ -310,23 +304,24 @@ class PortfolioAnalyzer:
                 
                 if len(parts) >= 2:
                     ticker = parts[0].strip().upper()
-                    # Remove exchange suffixes
                     if '.' in ticker:
                         ticker = ticker.split('.')[0]
-                    
                     try:
                         shares = float(parts[1].strip().replace(',', ''))
                         if shares > 0:
-                            holdings[ticker] = shares
+                            resolved = resolve_to_ticker(ticker) or ticker
+                            if resolved:
+                                holdings[resolved] = holdings.get(resolved, 0) + shares
                     except ValueError:
                         continue
                 elif len(parts) == 1:
-                    # Single ticker, assume 1 share
                     ticker = parts[0].strip().upper()
                     if '.' in ticker:
                         ticker = ticker.split('.')[0]
                     if ticker and ticker != 'NAN':
-                        holdings[ticker] = 1.0
+                        resolved = resolve_to_ticker(ticker) or ticker
+                        if resolved:
+                            holdings[resolved] = holdings.get(resolved, 0) + 1.0
         
         except Exception as e:
             print(f"Error parsing portfolio: {e}")

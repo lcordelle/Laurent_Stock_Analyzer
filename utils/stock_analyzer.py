@@ -5,6 +5,7 @@ Simplified for local use with Yahoo Finance
 """
 
 import yfinance as yf
+from utils.ticker_resolver import resolve_to_ticker
 import pandas as pd
 import numpy as np
 import warnings
@@ -18,9 +19,11 @@ class StockAnalyzer:
         self.cache = {}
     
     def get_stock_data(self, ticker, period="1y"):
-        """Fetch comprehensive stock data with caching"""
-        # Clean ticker symbol
-        ticker = str(ticker).upper().strip()
+        """Fetch comprehensive stock data with caching.
+        ticker: symbol (AAPL) or company name (Apple, Microsoft) - resolved automatically."""
+        query = str(ticker).strip()
+        resolved = resolve_to_ticker(query)
+        ticker = resolved if resolved else query.upper()
         
         # Check cache first
         cache_key = f"{ticker}_{period}"
@@ -235,7 +238,7 @@ class StockAnalyzer:
         return metrics
     
     def calculate_technical_indicators(self, hist):
-        """Calculate technical indicators"""
+        """Calculate technical indicators including Stochastic, ADX, and Ichimoku"""
         if hist is None or len(hist) < 50:
             return None
         
@@ -262,6 +265,72 @@ class StockAnalyzer:
         bb_std = hist['Close'].rolling(window=20).std()
         hist['BB_Upper'] = hist['BB_Middle'] + (bb_std * 2)
         hist['BB_Lower'] = hist['BB_Middle'] - (bb_std * 2)
+        
+        # Stochastic Oscillator (14-period)
+        if len(hist) >= 14:
+            low_14 = hist['Low'].rolling(window=14).min()
+            high_14 = hist['High'].rolling(window=14).max()
+            hist['Stoch_K'] = 100 * ((hist['Close'] - low_14) / (high_14 - low_14))
+            hist['Stoch_D'] = hist['Stoch_K'].rolling(window=3).mean()
+        
+        # ADX (Average Directional Index) - 14-period
+        if len(hist) >= 28:
+            # Calculate True Range
+            hist['TR'] = pd.concat([
+                hist['High'] - hist['Low'],
+                abs(hist['High'] - hist['Close'].shift()),
+                abs(hist['Low'] - hist['Close'].shift())
+            ], axis=1).max(axis=1)
+            
+            # Calculate Directional Movement
+            hist['DM_Plus'] = np.where(
+                (hist['High'] - hist['High'].shift()) > (hist['Low'].shift() - hist['Low']),
+                np.maximum(hist['High'] - hist['High'].shift(), 0),
+                0
+            )
+            hist['DM_Minus'] = np.where(
+                (hist['Low'].shift() - hist['Low']) > (hist['High'] - hist['High'].shift()),
+                np.maximum(hist['Low'].shift() - hist['Low'], 0),
+                0
+            )
+            
+            # Smooth the values
+            period = 14
+            hist['TR_Smooth'] = hist['TR'].rolling(window=period).sum()
+            hist['DM_Plus_Smooth'] = hist['DM_Plus'].rolling(window=period).sum()
+            hist['DM_Minus_Smooth'] = hist['DM_Minus'].rolling(window=period).sum()
+            
+            # Calculate DI+ and DI-
+            hist['DI_Plus'] = 100 * (hist['DM_Plus_Smooth'] / hist['TR_Smooth'])
+            hist['DI_Minus'] = 100 * (hist['DM_Minus_Smooth'] / hist['TR_Smooth'])
+            
+            # Calculate DX and ADX
+            hist['DX'] = 100 * abs(hist['DI_Plus'] - hist['DI_Minus']) / (hist['DI_Plus'] + hist['DI_Minus'])
+            hist['ADX'] = hist['DX'].rolling(window=period).mean()
+        
+        # Ichimoku Cloud
+        if len(hist) >= 52:
+            # Tenkan-sen (Conversion Line): (9-period high + 9-period low) / 2
+            period1 = 9
+            period2 = 26
+            period3 = 52
+            
+            hist['Ichimoku_Tenkan'] = (hist['High'].rolling(window=period1).max() + 
+                                       hist['Low'].rolling(window=period1).min()) / 2
+            
+            # Kijun-sen (Base Line): (26-period high + 26-period low) / 2
+            hist['Ichimoku_Kijun'] = (hist['High'].rolling(window=period2).max() + 
+                                     hist['Low'].rolling(window=period2).min()) / 2
+            
+            # Senkou Span A (Leading Span A): (Tenkan + Kijun) / 2, shifted 26 periods forward
+            hist['Ichimoku_Senkou_A'] = ((hist['Ichimoku_Tenkan'] + hist['Ichimoku_Kijun']) / 2).shift(period2)
+            
+            # Senkou Span B (Leading Span B): (52-period high + 52-period low) / 2, shifted 26 periods forward
+            hist['Ichimoku_Senkou_B'] = ((hist['High'].rolling(window=period3).max() + 
+                                         hist['Low'].rolling(window=period3).min()) / 2).shift(period2)
+            
+            # Chikou Span (Lagging Span): Close price shifted 26 periods backward
+            hist['Ichimoku_Chikou'] = hist['Close'].shift(-period2)
         
         return hist
     

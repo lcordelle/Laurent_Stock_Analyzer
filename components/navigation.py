@@ -1,65 +1,53 @@
 """
-Navigation Component
-Provides consistent navigation across the platform
+Enterprise Top Navigation Component
+Modern top menu bar with light/dark mode support
 """
 
 import streamlit as st
 
-def render_navigation():
-    """Render navigation sidebar"""
-    with st.sidebar:
-        st.markdown("""
-        <div style='text-align: center; padding: 1rem 0;'>
-            <h1 style='color: #1f77b4; margin: 0;'>📈 VirtualFusion</h1>
-            <p style='color: #666; margin: 0;'>Stock Analyzer Pro</p>
+def render_top_navigation():
+    """Render modern top navigation bar with theme toggle"""
+    
+    # Top navigation bar - use Streamlit buttons for reliable page routing
+    st.markdown("""
+    <div class="top-nav">
+        <div class="nav-brand">
+            <span>📈</span>
+            <span>Laurent Stock Analyzer</span>
         </div>
-        """, unsafe_allow_html=True)
-        st.markdown("---")
-        
-        st.markdown("### 🎯 Navigation")
-        st.markdown("""
-        **Core Analysis:**
-        - 📊 Single Analysis
-        - 📈 Batch Comparison
-        - 🔍 Stock Screener
-        
-        **Market Intelligence:**
-        - 📰 News & Market
-        - 📅 Earnings Calendar
-        
-        **Advanced Features:**
-        - ⚠️ Risk Analysis
-        - 📊 Performance Tracking
-        - 🔬 Advanced Analysis
-        - 📄 Reports
-        """)
-        
-        st.markdown("---")
-        
-        st.markdown("### ⚙️ Settings")
-        
-        time_period = st.selectbox(
-            "Time Period:",
-            ["1mo", "3mo", "6mo", "1y", "2y", "5y", "max"],
-            index=3,
-            key="time_period_global"
-        )
-        
-        show_technical = st.checkbox("Show Technical Indicators", value=True, key="show_technical_global")
-        show_fundamentals = st.checkbox("Show Fundamental Analysis", value=True, key="show_fundamentals_global")
-        
-        # Store in session state
-        st.session_state.time_period = time_period
-        st.session_state.show_technical = show_technical
-        st.session_state.show_fundamentals = show_fundamentals
-        
-        st.markdown("---")
-        st.info("💡 **Tip:** Higher scores indicate better overall financial health")
-        
-        st.markdown("---")
-        st.markdown("""
-        <div style='text-align: center; padding: 1rem 0;'>
-            <p style='font-size: 0.8rem; color: #999;'>Version 2.0.0</p>
-        </div>
-        """, unsafe_allow_html=True)
+    </div>
+    <div class="nav-spacer"></div>
+    """, unsafe_allow_html=True)
+    
+    # Navigation buttons (st.switch_page ensures correct page loads)
+    nav1, nav2, nav3, nav4, nav5, nav_spacer = st.columns([1, 1, 1, 1, 0.5, 2])
+    with nav1:
+        if st.button("🏠 Dashboard", key="nav_btn_dashboard", use_container_width=True):
+            st.switch_page("main.py")
+    with nav2:
+        if st.button("📊 Single Analysis", key="nav_btn_single", use_container_width=True):
+            st.switch_page("pages/1_Single_Analysis.py")
+    with nav3:
+        if st.button("📈 Batch Comparison", key="nav_btn_batch", use_container_width=True):
+            st.switch_page("pages/2_Batch_Comparison.py")
+    with nav4:
+        if st.button("🔍 Stock Screener", key="nav_btn_screener", use_container_width=True):
+            st.switch_page("pages/3_Stock_Screener.py")
+    with nav5:
+        if st.session_state.get('authenticated'):
+            if st.button("🚪", key="nav_btn_logout", use_container_width=True, help="Sign out"):
+                st.session_state.authenticated = False
+                st.rerun()
+    
+    # Theme toggle
+    col1, col2, col3 = st.columns([1, 1, 0.1])
+    with col3:
+        theme_icon = "☀️" if st.session_state.get('theme', 'dark') == 'dark' else "🌙"
+        theme_toggle = st.button(theme_icon, key="theme_toggle_top", help="Toggle Light/Dark Mode", use_container_width=True)
+        if theme_toggle:
+            st.session_state.theme = 'light' if st.session_state.get('theme', 'dark') == 'dark' else 'dark'
+            st.rerun()
 
+def render_navigation():
+    """Legacy function - now renders top navigation"""
+    render_top_navigation()

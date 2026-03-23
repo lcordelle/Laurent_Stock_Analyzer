@@ -101,3 +101,4 @@ Once your code is on GitHub, deploy to Render:
 - See `DEPLOY_TO_RENDER.md` for instructions
 - Your repository URL: https://github.com/lcordelle/Laurent_Stock_Analyzer
 
+

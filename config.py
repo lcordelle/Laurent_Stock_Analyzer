@@ -5,7 +5,7 @@
 # APPLICATION SETTINGS
 # ===========================================
 
-APP_TITLE = "VirtualFusion Stock Analyzer Pro"
+APP_TITLE = "Laurent Stock Analyzer Pro"
 APP_ICON = "📈"
 DEFAULT_PORT = 8501
 

@@ -5,8 +5,30 @@ Creates interactive charts and graphs for stock analysis
 
 import plotly.graph_objects as go
 import plotly.express as px
+from plotly.subplots import make_subplots
 import pandas as pd
 import numpy as np
+
+def get_annotation_position(level_price, all_prices, side="right", offset=0):
+    """
+    Calculate annotation position to avoid overlap
+    Returns annotation position with vertical offset
+    """
+    if not all_prices:
+        return "right", 0
+    
+    # Sort prices to find position
+    sorted_prices = sorted(set(all_prices))
+    try:
+        index = sorted_prices.index(level_price)
+    except ValueError:
+        index = len(sorted_prices)
+    
+    # Calculate vertical offset to stack annotations
+    # Each annotation gets 30px vertical spacing
+    vertical_offset = index * 30
+    
+    return side, vertical_offset
 
 def calculate_vwap(hist):
     """Calculate Volume Weighted Average Price"""
@@ -31,6 +53,68 @@ def calculate_support_resistance(hist, window=20):
     support = recent_lows.min()
     
     return support, resistance
+
+def identify_support_resistance_points(hist, support, resistance, tolerance=0.02):
+    """
+    Identify key support/resistance interaction points:
+    - Support bounces (green circles)
+    - Break in support (red circles)
+    - Resistance rejections (blue circles)
+    """
+    if hist is None or len(hist) < 10 or support is None or resistance is None:
+        return [], [], []
+    
+    support_bounces = []  # Green circles
+    support_breaks = []   # Red circles
+    resistance_rejections = []  # Blue circles
+    
+    # Tolerance for considering price "at" a level (2% by default)
+    support_tolerance = support * tolerance
+    resistance_tolerance = resistance * tolerance
+    
+    # Track if support has been broken
+    support_broken = False
+    
+    for i in range(1, len(hist)):
+        prev_low = hist['Low'].iloc[i-1]
+        prev_close = hist['Close'].iloc[i-1]
+        curr_low = hist['Low'].iloc[i]
+        curr_high = hist['High'].iloc[i]
+        curr_close = hist['Close'].iloc[i]
+        curr_date = hist.index[i]
+        
+        # Check for support bounces (price touches support and bounces up)
+        if not support_broken:
+            if prev_low <= support + support_tolerance and prev_low >= support - support_tolerance:
+                # Price was at support, check if it bounced
+                if curr_close > prev_close and curr_close > support:
+                    support_bounces.append({
+                        'date': curr_date,
+                        'price': support,
+                        'type': 'support_bounce'
+                    })
+        
+        # Check for break in support
+        if not support_broken:
+            if curr_low < support - support_tolerance:
+                support_broken = True
+                support_breaks.append({
+                    'date': curr_date,
+                    'price': support,
+                    'type': 'support_break'
+                })
+        
+        # Check for resistance rejections (price touches resistance and bounces down)
+        if curr_high >= resistance - resistance_tolerance and curr_high <= resistance + resistance_tolerance:
+            # Price was at resistance, check if it was rejected
+            if curr_close < prev_close or curr_close < resistance:
+                resistance_rejections.append({
+                    'date': curr_date,
+                    'price': resistance,
+                    'type': 'resistance_rejection'
+                })
+    
+    return support_bounces, support_breaks, resistance_rejections
 
 def calculate_pivot_points(hist):
     """Calculate pivot points for trading"""
@@ -199,51 +283,84 @@ def create_price_chart(data, intrinsic_value=None, metrics=None):
             hovertemplate='Fair Value: $%{y:.2f}<extra></extra>'
         ))
     
-    # Add support and resistance levels
+    # Identify support/resistance interaction points (calculate but add markers after candlestick)
+    support_bounces, support_breaks, resistance_rejections = [], [], []
     if support and resistance:
-        fig.add_hline(
-            y=support,
-            line_dash="dot",
-            line_color="green",
-            annotation_text=f"Support: ${support:.2f}",
-            annotation_position="right",
-            opacity=0.7
-        )
-        fig.add_hline(
-            y=resistance,
-            line_dash="dot",
-            line_color="red",
-            annotation_text=f"Resistance: ${resistance:.2f}",
-            annotation_position="right",
-            opacity=0.7
+        support_bounces, support_breaks, resistance_rejections = identify_support_resistance_points(
+            hist, support, resistance
         )
     
-    # Add pivot points
+    # Add support and resistance level lines (before candlestick)
+    # Use different positions to avoid overlap - stack vertically
+    if support and resistance:
+        # Support line - position on left side, bottom with horizontal offset
+        fig.add_hline(
+            y=support,
+            line_dash="solid",
+            line_color="#9333ea",  # Purple color like in screenshot
+            line_width=2,
+            annotation_text=f"Support: ${support:.2f}",
+            annotation_position="left",
+            annotation_yanchor="bottom",
+            annotation_y=0,
+            annotation_x=0.05,  # Position 5% from left (away from edge)
+            annotation_font=dict(size=11, color="#9333ea", family="Arial"),
+            annotation_bgcolor="rgba(255, 255, 255, 0.95)",  # More opaque
+            annotation_bordercolor="#9333ea",
+            annotation_borderwidth=1,
+            annotation_borderpad=4,
+            opacity=0.9
+        )
+        
+        # Resistance line - position on right side, top with horizontal offset to avoid marker overlap
+        fig.add_hline(
+            y=resistance,
+            line_dash="solid",
+            line_color="#ef4444",  # Red
+            line_width=4,  # Thicker line for better visibility
+            annotation_text=f"RESISTANCE: ${resistance:.2f}",
+            annotation_position="right",
+            annotation_yanchor="top",
+            annotation_y=0,
+            annotation_x=0.95,  # Position 95% from left (near right edge but with margin)
+            annotation_font=dict(
+                size=12,  # Reduced size to prevent overlap
+                color="#ef4444", 
+                family="Arial Black",
+            ),
+            annotation_bgcolor="rgba(255, 255, 255, 0.98)",  # More opaque background
+            annotation_bordercolor="#ef4444",
+            annotation_borderwidth=2,
+            annotation_borderpad=6,  # More padding for readability
+            opacity=1.0
+        )
+    
+    # Add pivot points - stack them vertically on right side to avoid overlap
     if pivot_points:
-        fig.add_hline(
-            y=pivot_points['pivot'],
-            line_dash="dashdot",
-            line_color="gray",
-            annotation_text=f"Pivot: ${pivot_points['pivot']:.2f}",
-            annotation_position="right",
-            opacity=0.6
-        )
-        fig.add_hline(
-            y=pivot_points['r1'],
-            line_dash="dot",
-            line_color="orange",
-            annotation_text=f"R1: ${pivot_points['r1']:.2f}",
-            annotation_position="right",
-            opacity=0.5
-        )
-        fig.add_hline(
-            y=pivot_points['s1'],
-            line_dash="dot",
-            line_color="lightgreen",
-            annotation_text=f"S1: ${pivot_points['s1']:.2f}",
-            annotation_position="right",
-            opacity=0.5
-        )
+        # Calculate vertical offsets to stack annotations
+        pivot_levels = [
+            (pivot_points['r1'], "R1", "orange", 0),
+            (pivot_points['pivot'], "Pivot", "gray", 1),
+            (pivot_points['s1'], "S1", "lightgreen", 2)
+        ]
+        
+        for price, label, color, offset_idx in pivot_levels:
+            fig.add_hline(
+                y=price,
+                line_dash="dashdot" if label == "Pivot" else "dot",
+                line_color=color,
+                annotation_text=f"{label}: ${price:.2f}",
+                annotation_position="right",
+                annotation_yanchor="top",
+                annotation_y=offset_idx * 28,  # Increased spacing to 28px
+                annotation_x=0.92,  # Position away from edge to avoid overlap
+                annotation_font=dict(size=10, color=color, family="Arial"),
+                annotation_bgcolor="rgba(255, 255, 255, 0.9)",
+                annotation_bordercolor=color,
+                annotation_borderwidth=1,
+                annotation_borderpad=3,
+                opacity=0.7
+            )
     
     # Add VWAP
     if vwap is not None:
@@ -319,6 +436,81 @@ def create_price_chart(data, intrinsic_value=None, metrics=None):
             hovertemplate='SMA 200: $%{y:.2f}<extra></extra>'
         ))
     
+    # Add support/resistance markers AFTER candlestick so they appear on top
+    if support and resistance:
+        # Add support bounce markers (green circles)
+        if support_bounces:
+            bounce_dates = [b['date'] for b in support_bounces]
+            bounce_prices = [b['price'] for b in support_bounces]
+            fig.add_trace(go.Scatter(
+                x=bounce_dates,
+                y=bounce_prices,
+                mode='markers+text',
+                name='Support',
+                marker=dict(
+                    size=15,
+                    color='#10b981',  # Green
+                    symbol='circle',
+                    line=dict(width=3, color='white'),
+                    opacity=0.9
+                ),
+                text=['Support'] * len(bounce_dates),
+                textposition='bottom left',  # Position to avoid overlap
+                textfont=dict(size=10, color='#10b981', family='Arial Black'),  # Smaller to avoid overlap
+                showlegend=False,
+                hovertemplate='<b>Support</b><br>Date: %{x}<br>Price: $%{y:.2f}<extra></extra>'
+            ))
+        
+        # Add support break markers (red circles)
+        if support_breaks:
+            break_dates = [b['date'] for b in support_breaks]
+            break_prices = [b['price'] for b in support_breaks]
+            fig.add_trace(go.Scatter(
+                x=break_dates,
+                y=break_prices,
+                mode='markers+text',
+                name='Break in Support',
+                marker=dict(
+                    size=18,
+                    color='#ef4444',  # Red
+                    symbol='circle',
+                    line=dict(width=3, color='white'),
+                    opacity=0.9
+                ),
+                text=['Break'] * len(break_dates),  # Shorter text to avoid overlap
+                textposition='top right',  # Position to avoid overlap
+                textfont=dict(size=10, color='#ef4444', family='Arial Black'),  # Smaller to avoid overlap
+                showlegend=False,
+                hovertemplate='<b>Break in Support</b><br>Date: %{x}<br>Price: $%{y:.2f}<extra></extra>'
+            ))
+        
+        # Add resistance rejection markers (red circles with bold styling)
+        if resistance_rejections:
+            reject_dates = [r['date'] for r in resistance_rejections]
+            reject_prices = [r['price'] for r in resistance_rejections]
+            fig.add_trace(go.Scatter(
+                x=reject_dates,
+                y=reject_prices,
+                mode='markers+text',
+                name='RESISTANCE',
+                marker=dict(
+                    size=22,  # Larger for visibility
+                    color='#ef4444',  # Red to match resistance line
+                    symbol='circle',
+                    line=dict(width=4, color='white'),  # Thicker white border
+                    opacity=1.0  # Fully opaque
+                ),
+                text=['RESISTANCE'] * len(reject_dates),
+                textposition='middle right',  # Position to the right of marker, not above
+                textfont=dict(
+                    size=11,  # Smaller to avoid overlap with annotation
+                    color='#ef4444',  # Red
+                    family='Arial Black',
+                ),
+                showlegend=False,
+                hovertemplate='<b>RESISTANCE REJECTION</b><br>Date: %{x}<br>Price: $%{y:.2f}<br>Price rejected at resistance level<extra></extra>'
+            ))
+    
     # Add instructional entry/exit signals with educational context
     if intrinsic_value:
         signals = identify_entry_exit_signals(hist, current_price, intrinsic_value, vwap)
@@ -348,8 +540,8 @@ def create_price_chart(data, intrinsic_value=None, metrics=None):
                         opacity=0.9
                     ),
                     text=[instruction.split('<br>')[0]],  # Just show the main label
-                    textposition='top center' if signal['type'] == 'entry' else 'bottom center',
-                    textfont=dict(size=11, color=color),
+                    textposition='top right' if signal['type'] == 'entry' else 'bottom left',  # Position to avoid overlap
+                    textfont=dict(size=10, color=color),  # Smaller to avoid overlap
                     hovertemplate=explanation + f"<br><br><b>Price:</b> ${signal['price']:.2f}<extra></extra>"
                 ))
     
@@ -881,8 +1073,132 @@ def calculate_optimal_entry_price(hist, intrinsic_value, support, vwap, current_
     
     return None
 
-def calculate_trading_signals(hist, intrinsic_value, metrics, score, vwap, support, resistance):
-    """Calculate professional trading buy/sell signals with entry/exit points"""
+def calculate_multi_timeframe_analysis(ticker, analyzer):
+    """Calculate technical indicators across multiple timeframes (1D, 1W, 1M)"""
+    timeframes = {
+        '1D': '1mo',  # Daily data for 1 month
+        '1W': '3mo',  # Weekly data for 3 months  
+        '1M': '1y'    # Monthly data for 1 year
+    }
+    
+    timeframe_analysis = {}
+    
+    for tf_name, period in timeframes.items():
+        try:
+            data = analyzer.get_stock_data(ticker, period=period)
+            if data and data.get('history') is not None:
+                hist = data['history']
+                if len(hist) < 20:
+                    continue
+                
+                # Calculate indicators for this timeframe
+                hist = analyzer.calculate_technical_indicators(hist)
+                
+                current_price = hist['Close'].iloc[-1]
+                latest_rsi = float(hist['RSI'].iloc[-1]) if 'RSI' in hist.columns and not pd.isna(hist['RSI'].iloc[-1]) else 50.0
+                latest_macd = float(hist['MACD'].iloc[-1]) if 'MACD' in hist.columns and not pd.isna(hist['MACD'].iloc[-1]) else 0.0
+                latest_signal = float(hist['Signal'].iloc[-1]) if 'Signal' in hist.columns and not pd.isna(hist['Signal'].iloc[-1]) else 0.0
+                
+                # Get moving averages
+                sma_20 = float(hist['SMA_20'].iloc[-1]) if 'SMA_20' in hist.columns and not pd.isna(hist['SMA_20'].iloc[-1]) else current_price
+                sma_50 = float(hist['SMA_50'].iloc[-1]) if 'SMA_50' in hist.columns and not pd.isna(hist['SMA_50'].iloc[-1]) else current_price
+                
+                # Get Stochastic if available
+                stoch_k = float(hist['Stoch_K'].iloc[-1]) if 'Stoch_K' in hist.columns and not pd.isna(hist['Stoch_K'].iloc[-1]) else 50.0
+                stoch_d = float(hist['Stoch_D'].iloc[-1]) if 'Stoch_D' in hist.columns and not pd.isna(hist['Stoch_D'].iloc[-1]) else 50.0
+                
+                # Get ADX if available
+                adx = float(hist['ADX'].iloc[-1]) if 'ADX' in hist.columns and not pd.isna(hist['ADX'].iloc[-1]) else 25.0
+                
+                # Calculate trend
+                trend = 'Bullish' if current_price > sma_20 > sma_50 else 'Bearish' if current_price < sma_20 < sma_50 else 'Neutral'
+                
+                # Calculate momentum score
+                momentum_score = 0
+                if latest_macd > latest_signal:
+                    momentum_score += 1
+                if latest_rsi > 50:
+                    momentum_score += 1
+                if stoch_k > stoch_d and stoch_k > 50:
+                    momentum_score += 1
+                if current_price > sma_20:
+                    momentum_score += 1
+                
+                timeframe_analysis[tf_name] = {
+                    'trend': trend,
+                    'rsi': latest_rsi,
+                    'macd_signal': 'Bullish' if latest_macd > latest_signal else 'Bearish',
+                    'stochastic': stoch_k,
+                    'adx': adx,
+                    'momentum_score': momentum_score,
+                    'price': current_price,
+                    'sma_20': sma_20,
+                    'sma_50': sma_50
+                }
+        except Exception as e:
+            continue
+    
+    return timeframe_analysis
+
+def calculate_confidence_score(signals, timeframe_analysis, score):
+    """Calculate confidence score (0-100) for trading signals based on multiple factors"""
+    confidence_factors = []
+    
+    # Factor 1: Number of buy/sell signals (more signals = higher confidence)
+    signal_count = len(signals.get('buy_signals', [])) + len(signals.get('sell_signals', []))
+    if signal_count >= 3:
+        confidence_factors.append(25)
+    elif signal_count == 2:
+        confidence_factors.append(15)
+    elif signal_count == 1:
+        confidence_factors.append(10)
+    else:
+        confidence_factors.append(5)
+    
+    # Factor 2: Multi-timeframe alignment (higher alignment = higher confidence)
+    if timeframe_analysis:
+        bullish_count = sum(1 for tf in timeframe_analysis.values() if tf.get('trend') == 'Bullish')
+        bearish_count = sum(1 for tf in timeframe_analysis.values() if tf.get('trend') == 'Bearish')
+        total_tfs = len(timeframe_analysis)
+        
+        if total_tfs > 0:
+            alignment = max(bullish_count, bearish_count) / total_tfs
+            confidence_factors.append(alignment * 30)
+        else:
+            confidence_factors.append(10)
+    else:
+        confidence_factors.append(10)
+    
+    # Factor 3: Fundamental score alignment
+    if score and score.get('total_score'):
+        fund_score = score['total_score']
+        if fund_score >= 70:
+            confidence_factors.append(25)
+        elif fund_score >= 60:
+            confidence_factors.append(20)
+        elif fund_score >= 50:
+            confidence_factors.append(15)
+        else:
+            confidence_factors.append(10)
+    else:
+        confidence_factors.append(10)
+    
+    # Factor 4: Signal confidence levels (High/Medium/Low)
+    high_conf_signals = sum(1 for s in signals.get('buy_signals', []) + signals.get('sell_signals', []) 
+                           if s.get('confidence') == 'High')
+    if high_conf_signals >= 2:
+        confidence_factors.append(20)
+    elif high_conf_signals == 1:
+        confidence_factors.append(15)
+    else:
+        confidence_factors.append(10)
+    
+    total_confidence = sum(confidence_factors)
+    return min(100, max(0, total_confidence))
+
+def calculate_trading_signals(hist, intrinsic_value, metrics, score, vwap, support, resistance, 
+                              analyzer=None, ticker=None, timeframe_analysis=None):
+    """Calculate professional trading buy/sell signals with entry/exit points, multi-timeframe analysis, and confidence scoring"""
     if hist is None or len(hist) < 20:
         return None
     
@@ -894,9 +1210,18 @@ def calculate_trading_signals(hist, intrinsic_value, metrics, score, vwap, suppo
         'exit_points': [],
         'stop_loss': None,
         'take_profit': [],
-        'optimal_entry': None,  # Add optimal entry suggestion
-        'resistance_level': None  # Add resistance level
+        'optimal_entry': None,
+        'resistance_level': None,
+        'multi_timeframe': timeframe_analysis or {},
+        'confidence_score': 0,
+        'confidence_level': 'Low'
     }
+    
+    # Get multi-timeframe analysis if not provided
+    if timeframe_analysis is None and analyzer and ticker:
+        signals['multi_timeframe'] = calculate_multi_timeframe_analysis(ticker, analyzer)
+    elif timeframe_analysis:
+        signals['multi_timeframe'] = timeframe_analysis
     
     # Calculate technical indicators if not present
     if 'RSI' not in hist.columns:
@@ -1141,9 +1466,376 @@ def calculate_trading_signals(hist, intrinsic_value, metrics, score, vwap, suppo
                 'target': 'Fair Value'
             })
     
+    # Calculate confidence score
+    signals['confidence_score'] = calculate_confidence_score(signals, signals['multi_timeframe'], score)
+    
+    # Determine confidence level
+    if signals['confidence_score'] >= 75:
+        signals['confidence_level'] = 'Very High'
+    elif signals['confidence_score'] >= 60:
+        signals['confidence_level'] = 'High'
+    elif signals['confidence_score'] >= 45:
+        signals['confidence_level'] = 'Medium'
+    elif signals['confidence_score'] >= 30:
+        signals['confidence_level'] = 'Low'
+    else:
+        signals['confidence_level'] = 'Very Low'
+    
     return signals
 
-def create_trading_signals_chart(data, intrinsic_value=None, metrics=None, score=None):
+def create_analyst_projection_chart(data, ratings_result, intrinsic_value=None, current_price=0, ticker=""):
+    """
+    Create a comprehensive analyst projection chart with:
+    - Historical price with fair value tunnel
+    - Projected price evolution (3m, 6m, 1y)
+    - Analyst target prices
+    - Multiple scenarios (bull, base, bear)
+    """
+    if not data or data.get('history') is None or len(data.get('history', [])) == 0:
+        return None
+    
+    hist = data['history']
+    if len(hist) == 0:
+        return None
+    
+    fig = go.Figure()
+    
+    # Get analyst targets
+    target_mean = 0
+    target_high = 0
+    target_low = 0
+    
+    if ratings_result:
+        ratings_list = ratings_result.get('ratings', [])
+        for rating in ratings_list:
+            if rating.get('target_price', 0) > 0:
+                if target_mean == 0:
+                    target_mean = rating.get('target_price', 0)
+                else:
+                    target_mean = (target_mean + rating.get('target_price', 0)) / 2
+            if rating.get('target_high', 0) > 0:
+                target_high = max(target_high, rating.get('target_high', 0))
+            if rating.get('target_low', 0) > 0:
+                if target_low == 0:
+                    target_low = rating.get('target_low', 0)
+                else:
+                    target_low = min(target_low, rating.get('target_low', 0))
+    
+    # Use current price if not provided
+    if current_price == 0:
+        current_price = hist['Close'].iloc[-1]
+    
+    # Historical dates
+    hist_dates = hist.index
+    
+    # Calculate fair value tunnel
+    fair_value_line = None
+    fair_value_upper = None
+    fair_value_lower = None
+    
+    if intrinsic_value and intrinsic_value > 0:
+        fair_value_line, fair_value_upper, fair_value_lower = calculate_fair_value_tunnel(
+            intrinsic_value, current_price, hist
+        )
+    
+    # Add historical price
+    fig.add_trace(go.Scatter(
+        x=hist_dates,
+        y=hist['Close'],
+        mode='lines',
+        name='Historical Price',
+        line=dict(color='#ffffff', width=2),
+        hovertemplate='Date: %{x}<br>Price: $%{y:.2f}<extra></extra>'
+    ))
+    
+    # Add fair value tunnel
+    if fair_value_upper is not None and fair_value_lower is not None:
+        fig.add_trace(go.Scatter(
+            x=hist_dates,
+            y=fair_value_upper,
+            mode='lines',
+            name='Fair Value Upper',
+            line=dict(width=0),
+            showlegend=False,
+            hoverinfo='skip'
+        ))
+        fig.add_trace(go.Scatter(
+            x=hist_dates,
+            y=fair_value_lower,
+            mode='lines',
+            name='Fair Value Tunnel',
+            fill='tonexty',
+            fillcolor='rgba(102, 126, 234, 0.2)',
+            line=dict(width=0),
+            showlegend=True,
+            hovertemplate='Fair Value Range: $%{y:.2f}<extra></extra>'
+        ))
+        fig.add_trace(go.Scatter(
+            x=hist_dates,
+            y=fair_value_line,
+            mode='lines',
+            name='Fair Market Value',
+            line=dict(color='#667eea', width=2, dash='dash'),
+            hovertemplate='Fair Value: $%{y:.2f}<extra></extra>'
+        ))
+    
+    # Project future dates (3m, 6m, 1y from last date)
+    from datetime import datetime, timedelta
+    last_date = hist_dates[-1]
+    if isinstance(last_date, pd.Timestamp):
+        future_3m = last_date + pd.Timedelta(days=90)
+        future_6m = last_date + pd.Timedelta(days=180)
+        future_1y = last_date + pd.Timedelta(days=365)
+    else:
+        future_3m = pd.Timestamp(last_date) + pd.Timedelta(days=90)
+        future_6m = pd.Timestamp(last_date) + pd.Timedelta(days=180)
+        future_1y = pd.Timestamp(last_date) + pd.Timedelta(days=365)
+    
+    # Calculate projections based on analyst targets and current trend
+    if target_mean > 0:
+        # Base case: linear progression to target
+        projection_dates = [last_date, future_3m, future_6m, future_1y]
+        base_projection = [current_price, 
+                          current_price + (target_mean - current_price) * 0.25,
+                          current_price + (target_mean - current_price) * 0.50,
+                          target_mean]
+        
+        # Bull case: 20% above target
+        bull_projection = [current_price,
+                          current_price + (target_mean * 1.2 - current_price) * 0.25,
+                          current_price + (target_mean * 1.2 - current_price) * 0.50,
+                          target_mean * 1.2]
+        
+        # Bear case: 20% below target or use target_low
+        bear_target = target_low if target_low > 0 else target_mean * 0.8
+        bear_projection = [current_price,
+                          current_price + (bear_target - current_price) * 0.25,
+                          current_price + (bear_target - current_price) * 0.50,
+                          bear_target]
+        
+        # Add projection lines
+        fig.add_trace(go.Scatter(
+            x=projection_dates,
+            y=base_projection,
+            mode='lines+markers',
+            name='Base Case (Analyst Target)',
+            line=dict(color='#00d4ff', width=3, dash='dot'),
+            marker=dict(size=8, symbol='circle'),
+            hovertemplate='Date: %{x}<br>Projected: $%{y:.2f}<extra></extra>'
+        ))
+        
+        fig.add_trace(go.Scatter(
+            x=projection_dates,
+            y=bull_projection,
+            mode='lines+markers',
+            name='Bull Case (+20%)',
+            line=dict(color='#00ff88', width=2, dash='dot'),
+            marker=dict(size=6, symbol='triangle-up'),
+            hovertemplate='Date: %{x}<br>Bull: $%{y:.2f}<extra></extra>'
+        ))
+        
+        fig.add_trace(go.Scatter(
+            x=projection_dates,
+            y=bear_projection,
+            mode='lines+markers',
+            name='Bear Case (-20%)',
+            line=dict(color='#ff3366', width=2, dash='dot'),
+            marker=dict(size=6, symbol='triangle-down'),
+            hovertemplate='Date: %{x}<br>Bear: $%{y:.2f}<extra></extra>'
+        ))
+        
+        # Add target price annotations - stack vertically to avoid overlap
+        target_levels = []
+        if target_high > 0:
+            target_levels.append((target_high, "High Target", "#00ff88", 0))
+        if target_mean > 0:
+            target_levels.append((target_mean, "Mean Target", "#00d4ff", len(target_levels)))
+        if target_low > 0:
+            target_levels.append((target_low, "Low Target", "#ff3366", len(target_levels)))
+        
+        for price, label, color, offset_idx in target_levels:
+            fig.add_hline(
+                y=price,
+                line_dash="dot",
+                line_color=color,
+                annotation_text=f"{label.split()[0]}: ${price:.2f}",  # Shorter label
+                annotation_position="right",
+                annotation_yanchor="top",
+                annotation_y=offset_idx * 25,  # Stack vertically
+                annotation_x=0.92,  # Position away from edge
+                annotation_font=dict(size=10, color=color, family="Arial"),
+                annotation_bgcolor="rgba(255, 255, 255, 0.9)",
+                annotation_bordercolor=color,
+                annotation_borderwidth=1,
+                annotation_borderpad=3,
+                opacity=0.7
+            )
+    
+    # Add current price line - position on left with offset
+    fig.add_hline(
+        y=current_price,
+        line_dash="solid",
+        line_color="#ffaa00",
+        annotation_text=f"Current: ${current_price:.2f}",
+        annotation_position="left",
+        annotation_yanchor="top",
+        annotation_y=0,
+        annotation_x=0.05,  # Position away from edge
+        annotation_font=dict(size=11, color="#ffaa00", family="Arial"),
+        annotation_bgcolor="rgba(255, 255, 255, 0.9)",
+        annotation_bordercolor="#ffaa00",
+        annotation_borderwidth=1,
+        annotation_borderpad=4,
+        opacity=0.8,
+        line_width=2
+    )
+    
+    # Calculate and add resistance level with markers
+    support, resistance = calculate_support_resistance(hist)
+    
+    # Identify support/resistance interaction points
+    support_bounces, support_breaks, resistance_rejections = identify_support_resistance_points(
+        hist, support, resistance
+    )
+    
+    if support:
+        # Support line (purple) - position on left, bottom
+        fig.add_hline(
+            y=support,
+            line_dash="solid",
+            line_color="#9333ea",
+            line_width=2,
+            annotation_text=f"Support: ${support:.2f}",
+            annotation_position="left",
+            annotation_yanchor="bottom",
+            annotation_y=0,
+            annotation_x=0.05,  # Position 5% from left (away from edge)
+            annotation_font=dict(size=11, color="#9333ea", family="Arial"),
+            annotation_bgcolor="rgba(255, 255, 255, 0.95)",  # More opaque
+            annotation_bordercolor="#9333ea",
+            annotation_borderwidth=1,
+            annotation_borderpad=4,
+            opacity=0.9
+        )
+        
+        # Add support bounce markers
+        if support_bounces:
+            bounce_dates = [b['date'] for b in support_bounces]
+            bounce_prices = [b['price'] for b in support_bounces]
+            fig.add_trace(go.Scatter(
+                x=bounce_dates,
+                y=bounce_prices,
+                mode='markers+text',
+                name='Support',
+                marker=dict(size=15, color='#10b981', symbol='circle', line=dict(width=3, color='white')),
+                text=['Support'] * len(bounce_dates),
+                textposition='bottom left',  # Position to avoid overlap
+                textfont=dict(size=10, color='#10b981', family='Arial Black'),  # Smaller to avoid overlap
+                showlegend=False,
+                hovertemplate='<b>Support</b><br>Date: %{x}<br>Price: $%{y:.2f}<extra></extra>'
+            ))
+        
+        # Add support break markers
+        if support_breaks:
+            break_dates = [b['date'] for b in support_breaks]
+            break_prices = [b['price'] for b in support_breaks]
+            fig.add_trace(go.Scatter(
+                x=break_dates,
+                y=break_prices,
+                mode='markers+text',
+                name='Break in Support',
+                marker=dict(size=18, color='#ef4444', symbol='circle', line=dict(width=3, color='white')),
+                text=['Break'] * len(break_dates),  # Shorter text to avoid overlap
+                textposition='top right',  # Position to avoid overlap
+                textfont=dict(size=10, color='#ef4444', family='Arial Black'),  # Smaller to avoid overlap
+                showlegend=False,
+                hovertemplate='<b>Break in Support</b><br>Date: %{x}<br>Price: $%{y:.2f}<extra></extra>'
+            ))
+    
+    if resistance:
+        # Add bold red resistance line - position on right, top (stacked above other annotations)
+        fig.add_hline(
+            y=resistance,
+            line_dash="solid",
+            line_color="#ef4444",
+            line_width=4,  # Thicker line for better visibility
+            annotation_text=f"RESISTANCE: ${resistance:.2f}",
+            annotation_position="right",
+            annotation_yanchor="top",
+            annotation_y=0,
+            annotation_x=0.95,  # Position 95% from left (near right edge but with margin)
+            annotation_font=dict(
+                size=12,  # Reduced size to prevent overlap
+                color="#ef4444", 
+                family="Arial Black",
+            ),
+            annotation_bgcolor="rgba(255, 255, 255, 0.98)",  # More opaque background
+            annotation_bordercolor="#ef4444",
+            annotation_borderwidth=2,
+            annotation_borderpad=6,  # More padding for readability
+            opacity=1.0
+        )
+        
+        # Add resistance rejection markers (red circles with bold styling)
+        if resistance_rejections:
+            reject_dates = [r['date'] for r in resistance_rejections]
+            reject_prices = [r['price'] for r in resistance_rejections]
+            fig.add_trace(go.Scatter(
+                x=reject_dates,
+                y=reject_prices,
+                mode='markers+text',
+                name='RESISTANCE',
+                marker=dict(
+                    size=22,  # Larger for visibility
+                    color='#ef4444',  # Red to match resistance line
+                    symbol='circle',
+                    line=dict(width=4, color='white'),  # Thicker white border
+                    opacity=1.0  # Fully opaque
+                ),
+                text=['RESISTANCE'] * len(reject_dates),
+                textposition='middle right',  # Position to the right of marker, not above
+                textfont=dict(
+                    size=11,  # Smaller to avoid overlap with annotation
+                    color='#ef4444',  # Red
+                    family='Arial Black',
+                ),
+                showlegend=False,
+                hovertemplate='<b>RESISTANCE REJECTION</b><br>Date: %{x}<br>Price: $%{y:.2f}<br>Price rejected at resistance level<extra></extra>'
+            ))
+    
+    # Update layout
+    fig.update_layout(
+        title={
+            'text': f'📊 {ticker} - Analyst Projections & Fair Value Tunnel',
+            'x': 0.5,
+            'xanchor': 'center',
+            'font': {'size': 20, 'color': '#ffffff'}
+        },
+        xaxis=dict(
+            title='Date',
+            gridcolor='rgba(128, 128, 128, 0.2)',
+            showgrid=True
+        ),
+        yaxis=dict(
+            title='Price ($)',
+            gridcolor='rgba(128, 128, 128, 0.2)',
+            showgrid=True
+        ),
+        plot_bgcolor='#0a0e27',
+        paper_bgcolor='#0a0e27',
+        font=dict(color='#ffffff', size=12),
+        legend=dict(
+            bgcolor='rgba(26, 31, 58, 0.8)',
+            bordercolor='rgba(255, 255, 255, 0.2)',
+            borderwidth=1
+        ),
+        hovermode='x unified',
+        height=600
+    )
+    
+    return fig
+
+def create_trading_signals_chart(data, intrinsic_value=None, metrics=None, score=None, analyzer=None):
     """Create professional trading signals chart with buy/sell zones and entry/exit points"""
     if not data:
         return None
@@ -1159,8 +1851,14 @@ def create_trading_signals_chart(data, intrinsic_value=None, metrics=None, score
     vwap = calculate_vwap(hist)
     support, resistance = calculate_support_resistance(hist)
     
-    # Calculate trading signals
-    trading_signals = calculate_trading_signals(hist, intrinsic_value, metrics, score, vwap, support, resistance)
+    # Get multi-timeframe analysis if analyzer is provided
+    timeframe_analysis = None
+    if analyzer:
+        timeframe_analysis = calculate_multi_timeframe_analysis(ticker, analyzer)
+    
+    # Calculate trading signals with multi-timeframe analysis
+    trading_signals = calculate_trading_signals(hist, intrinsic_value, metrics, score, vwap, support, resistance,
+                                                analyzer=analyzer, ticker=ticker, timeframe_analysis=timeframe_analysis)
     
     if not trading_signals:
         return None
@@ -1202,24 +1900,56 @@ def create_trading_signals_chart(data, intrinsic_value=None, metrics=None, score
             hovertemplate='VWAP: $%{y:.2f}<extra></extra>'
         ))
     
-    # Add support and resistance
+    # Identify support/resistance interaction points (calculate but add markers after)
+    support_bounces, support_breaks, resistance_rejections = [], [], []
+    if support and resistance:
+        support_bounces, support_breaks, resistance_rejections = identify_support_resistance_points(
+            hist, support, resistance
+        )
+    
+    # Add support and resistance level lines (before markers)
     if support:
+        # Support line (purple like in screenshot) - position on left, bottom
         fig.add_hline(
             y=support,
-            line_dash="dot",
-            line_color="green",
+            line_dash="solid",
+            line_color="#9333ea",  # Purple
+            line_width=2,
             annotation_text=f"Support: ${support:.2f}",
-            annotation_position="right",
-            opacity=0.7
+            annotation_position="left",
+            annotation_yanchor="bottom",
+            annotation_y=0,
+            annotation_x=0.05,  # Position 5% from left (away from edge)
+            annotation_font=dict(size=11, color="#9333ea", family="Arial"),
+            annotation_bgcolor="rgba(255, 255, 255, 0.95)",  # More opaque
+            annotation_bordercolor="#9333ea",
+            annotation_borderwidth=1,
+            annotation_borderpad=4,
+            opacity=0.9
         )
+        
     if resistance:
+        # Add bold red resistance line - position on right, top (stacked above other annotations)
         fig.add_hline(
             y=resistance,
-            line_dash="dot",
-            line_color="red",
-            annotation_text=f"Resistance: ${resistance:.2f}",
+            line_dash="solid",
+            line_color="#ef4444",
+            line_width=4,  # Thicker line for better visibility
+            annotation_text=f"RESISTANCE: ${resistance:.2f}",
             annotation_position="right",
-            opacity=0.7
+            annotation_yanchor="top",
+            annotation_y=0,
+            annotation_x=0.95,  # Position 95% from left (near right edge but with margin)
+            annotation_font=dict(
+                size=12,  # Reduced size to prevent overlap
+                color="#ef4444", 
+                family="Arial Black",
+            ),
+            annotation_bgcolor="rgba(255, 255, 255, 0.98)",  # More opaque background
+            annotation_bordercolor="#ef4444",
+            annotation_borderwidth=2,
+            annotation_borderpad=6,  # More padding for readability
+            opacity=1.0
         )
     
     # Add instructional BUY signals with educational context
@@ -1288,8 +2018,8 @@ def create_trading_signals_chart(data, intrinsic_value=None, metrics=None, score
                     opacity=0.9
                 ),
                 text=[instruction.split('<br>')[0]],  # Main label
-                textposition='top center',
-                textfont=dict(size=11, color='#2e7d32'),
+                textposition='top right',  # Position to avoid overlap
+                textfont=dict(size=10, color='#2e7d32'),  # Smaller to avoid overlap
                 hovertemplate=explanation + f"<br><br><b>Entry Price:</b> ${signal['price']:.2f}<extra></extra>",
                 showlegend=True
             ))
@@ -1360,21 +2090,29 @@ def create_trading_signals_chart(data, intrinsic_value=None, metrics=None, score
                     opacity=0.9
                 ),
                 text=[instruction.split('<br>')[0]],  # Main label
-                textposition='bottom center',
-                textfont=dict(size=11, color='#c62828'),
+                textposition='bottom left',  # Position to avoid overlap
+                textfont=dict(size=10, color='#c62828'),  # Smaller to avoid overlap
                 hovertemplate=explanation + f"<br><br><b>Exit Price:</b> ${signal['price']:.2f}<extra></extra>",
                 showlegend=True
             ))
     
-    # Add Stop Loss level
+    # Add Stop Loss level - position on right, stacked below resistance
     if trading_signals['stop_loss']:
         stop_loss_price = trading_signals['stop_loss']['price']
         fig.add_hline(
             y=stop_loss_price,
             line_dash="dash",
             line_color="red",
-            annotation_text=f"Stop Loss: ${stop_loss_price:.2f}",
+            annotation_text=f"SL: ${stop_loss_price:.2f}",
             annotation_position="right",
+            annotation_yanchor="top",
+            annotation_y=40,  # Increased spacing below resistance annotation
+            annotation_x=0.92,  # Position away from edge
+            annotation_font=dict(size=11, color="red", family="Arial"),
+            annotation_bgcolor="rgba(255, 255, 255, 0.95)",
+            annotation_bordercolor="red",
+            annotation_borderwidth=1,
+            annotation_borderpad=4,
             opacity=0.8,
             line_width=2
         )
@@ -1403,16 +2141,99 @@ def create_trading_signals_chart(data, intrinsic_value=None, metrics=None, score
             showlegend=True
         ))
         
-        # Add horizontal lines for take profit levels
-        for tp in trading_signals['take_profit']:
+        # Add horizontal lines for take profit levels - stack them vertically
+        for idx, tp in enumerate(trading_signals['take_profit']):
             fig.add_hline(
                 y=tp['price'],
                 line_dash="dot",
                 line_color="orange",
-                annotation_text=tp['label'],
+                annotation_text=f"{tp['label'].split(':')[0]}: ${tp['price']:.2f}",
                 annotation_position="right",
-                opacity=0.6
+                annotation_yanchor="top",
+                annotation_y=70 + (idx * 28),  # Increased spacing
+                annotation_x=0.92,  # Position away from edge
+                annotation_font=dict(size=10, color="orange", family="Arial"),
+                annotation_bgcolor="rgba(255, 255, 255, 0.9)",
+                annotation_bordercolor="orange",
+                annotation_borderwidth=1,
+                annotation_borderpad=3,
+                opacity=0.7
             )
+    
+    # Add support/resistance markers AFTER all other elements so they appear on top
+    if support and resistance:
+        # Add support bounce markers (green circles)
+        if support_bounces:
+            bounce_dates = [b['date'] for b in support_bounces]
+            bounce_prices = [b['price'] for b in support_bounces]
+            fig.add_trace(go.Scatter(
+                x=bounce_dates,
+                y=bounce_prices,
+                mode='markers+text',
+                name='Support',
+                marker=dict(
+                    size=15,
+                    color='#10b981',
+                    symbol='circle',
+                    line=dict(width=3, color='white'),
+                    opacity=0.9
+                ),
+                text=['Support'] * len(bounce_dates),
+                textposition='bottom left',  # Position to avoid overlap
+                textfont=dict(size=10, color='#10b981', family='Arial Black'),  # Smaller to avoid overlap
+                showlegend=False,
+                hovertemplate='<b>Support</b><br>Date: %{x}<br>Price: $%{y:.2f}<extra></extra>'
+            ))
+        
+        # Add support break markers (red circles)
+        if support_breaks:
+            break_dates = [b['date'] for b in support_breaks]
+            break_prices = [b['price'] for b in support_breaks]
+            fig.add_trace(go.Scatter(
+                x=break_dates,
+                y=break_prices,
+                mode='markers+text',
+                name='Break in Support',
+                marker=dict(
+                    size=18,
+                    color='#ef4444',
+                    symbol='circle',
+                    line=dict(width=3, color='white'),
+                    opacity=0.9
+                ),
+                text=['Break'] * len(break_dates),  # Shorter text to avoid overlap
+                textposition='top right',  # Position to avoid overlap
+                textfont=dict(size=10, color='#ef4444', family='Arial Black'),  # Smaller to avoid overlap
+                showlegend=False,
+                hovertemplate='<b>Break in Support</b><br>Date: %{x}<br>Price: $%{y:.2f}<extra></extra>'
+            ))
+        
+        # Add resistance rejection markers (red circles with bold styling)
+        if resistance_rejections:
+            reject_dates = [r['date'] for r in resistance_rejections]
+            reject_prices = [r['price'] for r in resistance_rejections]
+            fig.add_trace(go.Scatter(
+                x=reject_dates,
+                y=reject_prices,
+                mode='markers+text',
+                name='RESISTANCE',
+                marker=dict(
+                    size=22,  # Larger for visibility
+                    color='#ef4444',  # Red to match resistance line
+                    symbol='circle',
+                    line=dict(width=4, color='white'),  # Thicker white border
+                    opacity=1.0  # Fully opaque
+                ),
+                text=['RESISTANCE'] * len(reject_dates),
+                textposition='middle right',  # Position to the right of marker, not above
+                textfont=dict(
+                    size=11,  # Smaller to avoid overlap with annotation
+                    color='#ef4444',  # Red
+                    family='Arial Black',
+                ),
+                showlegend=False,
+                hovertemplate='<b>RESISTANCE REJECTION</b><br>Date: %{x}<br>Price: $%{y:.2f}<br>Price rejected at resistance level<extra></extra>'
+            ))
     
     # Update layout
     fig.update_layout(

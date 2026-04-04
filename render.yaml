@@ -10,4 +10,3 @@ services:
         value: 3.11.9
       - key: ALPHA_VANTAGE_API_KEY
         sync: false
-

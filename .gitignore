@@ -9,8 +9,8 @@ venv/
 ENV/
 .venv
 
-# Streamlit
-.streamlit/
+# Streamlit (config.toml is committed; secrets stay local)
+.streamlit/secrets.toml
 
 # IDE
 .vscode/
@@ -45,4 +45,13 @@ build/
 .env
 .env.local
 .env.*.local
+
+# Deployment config with secrets — manage env vars in Render dashboard
+# render.yaml is safe to commit only after removing hardcoded values
+
+# Data files (may contain personal analysis records)
+data/
+
+# ngrok config (contains tunnel domain)
+ngrok.yml
 

@@ -7,6 +7,6 @@
 version: "2"
 tunnels:
   stock:
-    addr: 8501
+    addr: 3000
     proto: http
     domain: laurent.ngrok.io

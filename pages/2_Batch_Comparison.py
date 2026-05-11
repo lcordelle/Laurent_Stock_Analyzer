@@ -65,7 +65,7 @@ news_market = st.session_state.news_market
 time_period = st.session_state.get('time_period', '1y')
 
 # Header - explicit Batch Comparison (not Single Stock)
-render_header("📈 Batch Stock Comparison", "Compare multiple stocks side-by-side with instant signals")
+render_header("Batch comparison", "Same dashboard per ticker — executive KPIs, analyst, peers, forecast")
 
 # Input for multiple tickers with form for Enter key submission
 with st.form("batch_comparison_form", clear_on_submit=False):
@@ -147,7 +147,7 @@ if submitted and tickers_input:
                                reverse=True)
         
         # Summary comparison table at top
-        st.subheader("📊 Quick Comparison Summary")
+        st.subheader("Cross-ticker snapshot")
         summary_data = []
         for ticker in sorted_tickers:
             info = stocks_analysis[ticker]
@@ -175,9 +175,9 @@ if submitted and tickers_input:
         )
         
         st.markdown("---")
-        st.subheader("📈 Detailed Analysis for Each Stock")
+        st.subheader("Per-ticker dashboards")
         
-        # Display detailed analysis for each stock (same style as Single Analysis)
+        # Display detailed analysis for each stock (same layout as Single Analysis)
         for ticker in sorted_tickers:
             info = stocks_analysis[ticker]
             data = info['data']
@@ -185,16 +185,10 @@ if submitted and tickers_input:
             score = info['score']
             forecast = info['forecast']
             
-            # Display company info (same as Single Analysis)
-            st.subheader(f"{data['info'].get('longName', ticker)} ({ticker})")
-            st.write(data['info'].get('longBusinessSummary', 'No description available')[:500] + '...')
-            
-            st.markdown("---")
-            
             # Get news articles
             news_articles = []
             try:
-                news_articles = news_market.get_stock_news(ticker, limit=5)
+                news_articles = news_market.get_stock_news(ticker, limit=10)
             except Exception as e:
                 pass
             

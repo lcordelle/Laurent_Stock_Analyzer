@@ -70,7 +70,7 @@ show_technical = st.session_state.get('show_technical', True)
 time_period = st.session_state.get('time_period', '1y')
 
 # Header
-render_header("Stock Screener", "Filter stocks by criteria with automated analysis")
+render_header("Stock screener", "Filter universe — screened names use the same dashboard as single & batch")
 
 # Tabs for Screener, Portfolio Analysis, and Risk Dashboard
 tab_screener, tab_portfolio, tab_risk = st.tabs(["🔍 Stock Screener", "💼 Portfolio Analyzer", "📊 Risk Dashboard"])
@@ -374,7 +374,7 @@ with tab_screener:
                                    reverse=True)
                 
                 # Summary table
-                st.subheader("📊 Screening Results Summary")
+                st.subheader("Screening snapshot")
                 summary_data = []
                 for ticker in sorted_tickers:
                     info = passed_stocks_analysis[ticker]
@@ -408,9 +408,9 @@ with tab_screener:
                 )
                 
                 st.markdown("---")
-                st.subheader("📈 Detailed Analysis for Screened Stocks")
+                st.subheader("Screened names — dashboards")
                 
-                # Display detailed analysis for each stock (same style as Single Analysis)
+                # Display detailed analysis for each stock (same layout as Single / Batch)
                 for ticker in sorted_tickers:
                     info = passed_stocks_analysis[ticker]
                     data = info['data']
@@ -418,16 +418,10 @@ with tab_screener:
                     score = info['score']
                     forecast = info['forecast']
                     
-                    # Display company info (same as Single Analysis)
-                    st.subheader(f"{data['info'].get('longName', ticker)} ({ticker})")
-                    st.write(data['info'].get('longBusinessSummary', 'No description available')[:500] + '...')
-                    
-                    st.markdown("---")
-                    
                     # Get news articles
                     news_articles = []
                     try:
-                        news_articles = news_market.get_stock_news(ticker, limit=5)
+                        news_articles = news_market.get_stock_news(ticker, limit=10)
                     except Exception as e:
                         pass
                     

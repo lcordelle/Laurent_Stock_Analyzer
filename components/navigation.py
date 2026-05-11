@@ -20,7 +20,7 @@ def render_top_navigation():
     """, unsafe_allow_html=True)
     
     # Navigation buttons (st.switch_page ensures correct page loads)
-    nav1, nav2, nav3, nav4, nav5, nav_spacer = st.columns([1, 1, 1, 1, 0.5, 2])
+    nav1, nav2, nav3, nav4, nav5, nav6, nav_spacer = st.columns([1, 1, 1, 1, 1, 0.5, 2])
     with nav1:
         if st.button("🏠 Dashboard", key="nav_btn_dashboard", use_container_width=True):
             st.switch_page("main.py")
@@ -34,6 +34,9 @@ def render_top_navigation():
         if st.button("🔍 Stock Screener", key="nav_btn_screener", use_container_width=True):
             st.switch_page("pages/3_Stock_Screener.py")
     with nav5:
+        if st.button("🤖 AI Predictor", key="nav_btn_ai", use_container_width=True):
+            st.switch_page("pages/5_AI_Predictor.py")
+    with nav6:
         if st.session_state.get('authenticated'):
             if st.button("🚪", key="nav_btn_logout", use_container_width=True, help="Sign out"):
                 st.session_state.authenticated = False

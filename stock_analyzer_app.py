@@ -80,101 +80,103 @@ class StockAnalyzer:
     
     def calculate_score(self, data):
         """Calculate comprehensive stock score (0-100)"""
-        if not data:
+        if not data or "error" in data:
             return None
-        
+
         info = data['info']
         score = 0
         max_score = 100
         components = {}
-        
+
         # Profitability Score (25 points)
         try:
-            gross_margin = info.get('grossMargins', 0) * 100
-            if gross_margin > 60:
-                score += 25
-                components['Gross Margin'] = 25
-            elif gross_margin > 40:
-                score += 15
-                components['Gross Margin'] = 15
-            elif gross_margin > 20:
-                score += 10
-                components['Gross Margin'] = 10
+            gm = info.get('grossMargins')
+            if gm is not None and not pd.isna(gm):
+                gross_margin = float(gm) * 100
+                if gross_margin > 60:
+                    score += 25; components['Gross Margin'] = 25
+                elif gross_margin > 40:
+                    score += 15; components['Gross Margin'] = 15
+                elif gross_margin > 20:
+                    score += 10; components['Gross Margin'] = 10
+                else:
+                    score += 5; components['Gross Margin'] = 5
             else:
-                components['Gross Margin'] = 5
-                score += 5
-        except:
+                components['Gross Margin'] = 0
+        except (TypeError, ValueError):
             components['Gross Margin'] = 0
-        
+
         # ROE Score (20 points)
         try:
-            roe = info.get('returnOnEquity', 0) * 100
-            if roe > 20:
-                score += 20
-                components['ROE'] = 20
-            elif roe > 15:
-                score += 15
-                components['ROE'] = 15
-            elif roe > 10:
-                score += 10
-                components['ROE'] = 10
+            roe_raw = info.get('returnOnEquity')
+            if roe_raw is not None and not pd.isna(roe_raw):
+                roe = float(roe_raw) * 100
+                if roe > 20:
+                    score += 20; components['ROE'] = 20
+                elif roe > 15:
+                    score += 15; components['ROE'] = 15
+                elif roe > 10:
+                    score += 10; components['ROE'] = 10
+                else:
+                    score += 5; components['ROE'] = 5
             else:
-                components['ROE'] = 5
-                score += 5
-        except:
+                components['ROE'] = 0
+        except (TypeError, ValueError):
             components['ROE'] = 0
-        
+
         # FCF Margin Score (20 points)
         try:
-            fcf_margin = info.get('freeCashflow', 0) / info.get('totalRevenue', 1) * 100
-            if fcf_margin > 15:
-                score += 20
-                components['FCF Margin'] = 20
-            elif fcf_margin > 10:
-                score += 15
-                components['FCF Margin'] = 15
-            elif fcf_margin > 5:
-                score += 10
-                components['FCF Margin'] = 10
+            fcf = info.get('freeCashflow')
+            rev = info.get('totalRevenue')
+            if fcf is not None and rev is not None and not pd.isna(fcf) and not pd.isna(rev) and float(rev) != 0:
+                fcf_margin = float(fcf) / float(rev) * 100
+                if fcf_margin > 15:
+                    score += 20; components['FCF Margin'] = 20
+                elif fcf_margin > 10:
+                    score += 15; components['FCF Margin'] = 15
+                elif fcf_margin > 5:
+                    score += 10; components['FCF Margin'] = 10
+                else:
+                    score += 5; components['FCF Margin'] = 5
             else:
-                components['FCF Margin'] = 5
-                score += 5
-        except:
+                components['FCF Margin'] = 0
+        except (TypeError, ValueError, ZeroDivisionError):
             components['FCF Margin'] = 0
-        
+
         # Valuation Score (20 points)
         try:
-            pe_ratio = info.get('trailingPE', 999)
-            if 10 < pe_ratio < 25:
-                score += 20
-                components['Valuation'] = 20
-            elif 5 < pe_ratio < 35:
-                score += 15
-                components['Valuation'] = 15
-            elif pe_ratio < 50:
-                score += 10
-                components['Valuation'] = 10
+            pe = info.get('trailingPE')
+            if pe is not None and not pd.isna(pe):
+                pe_ratio = float(pe)
+                if 10 < pe_ratio < 25:
+                    score += 20; components['Valuation'] = 20
+                elif 5 < pe_ratio < 35:
+                    score += 15; components['Valuation'] = 15
+                elif pe_ratio < 50:
+                    score += 10; components['Valuation'] = 10
+                else:
+                    score += 5; components['Valuation'] = 5
             else:
-                components['Valuation'] = 5
-                score += 5
-        except:
+                components['Valuation'] = 0
+        except (TypeError, ValueError):
             components['Valuation'] = 0
-        
+
         # Growth Score (15 points)
         try:
-            revenue_growth = info.get('revenueGrowth', 0) * 100
-            if revenue_growth > 20:
-                score += 15
-                components['Growth'] = 15
-            elif revenue_growth > 10:
-                score += 10
-                components['Growth'] = 10
-            elif revenue_growth > 0:
-                score += 5
-                components['Growth'] = 5
+            rg = info.get('revenueGrowth')
+            if rg is not None and not pd.isna(rg):
+                revenue_growth = float(rg) * 100
+                if revenue_growth > 20:
+                    score += 15; components['Growth'] = 15
+                elif revenue_growth > 10:
+                    score += 10; components['Growth'] = 10
+                elif revenue_growth > 0:
+                    score += 5; components['Growth'] = 5
+                else:
+                    components['Growth'] = 0
             else:
                 components['Growth'] = 0
-        except:
+        except (TypeError, ValueError):
             components['Growth'] = 0
         
         return {
@@ -218,7 +220,8 @@ class StockAnalyzer:
             'Beta': info.get('beta', 0),
             'Target Price': info.get('targetMeanPrice', 0),
             'Analyst Rating': info.get('recommendationKey', 'N/A'),
-            'Number of Analysts': info.get('numberOfAnalystOpinions', 0)
+            'Number of Analysts': info.get('numberOfAnalystOpinions', 0),
+            'recommendationMean': info.get('recommendationMean'),
         }
         
         return metrics
@@ -796,9 +799,16 @@ def main():
                     )
                 
                 with col2:
-                    excel_buffer = pd.ExcelWriter('comparison.xlsx', engine='xlsxwriter')
-                    comparison_df.to_excel(excel_buffer, index=False, sheet_name='Comparison')
-                    excel_buffer.close()
+                    import io
+                    _xls = io.BytesIO()
+                    with pd.ExcelWriter(_xls, engine='xlsxwriter') as _w:
+                        comparison_df.to_excel(_w, index=False, sheet_name='Comparison')
+                    st.download_button(
+                        label="📥 Download Excel",
+                        data=_xls.getvalue(),
+                        file_name=f"stock_comparison_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
     
     elif analysis_mode == "🔍 Stock Screener":
         st.header("Advanced Stock Screener")

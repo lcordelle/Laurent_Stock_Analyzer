@@ -616,9 +616,10 @@ def render_buy_sell_badge(signal_type, text=""):
     </span>
     """, unsafe_allow_html=True)
 
-def render_analyst_ranking_panel(ratings_result, current_price, ticker="", data=None, intrinsic_value=None):
+def render_analyst_ranking_panel(ratings_result, current_price, ticker="", data=None, intrinsic_value=None, compact=False):
     """
-    Render enterprise-grade analyst ranking panel with trends and projections
+    Render enterprise-grade analyst ranking panel with trends and projections.
+    If compact=True, omits projection chart and extra padding for dashboard layout.
     """
     if not ratings_result:
         st.markdown("""
@@ -776,8 +777,8 @@ def render_analyst_ranking_panel(ratings_result, current_price, ticker="", data=
     
     st.markdown(panel_html, unsafe_allow_html=True)
     
-    # Add projection chart
-    if data and data.get('history') is not None and len(data.get('history', [])) > 0:
+    # Add projection chart (full mode only — dashboard uses compact)
+    if not compact and data and data.get('history') is not None and len(data.get('history', [])) > 0:
         from utils.visualizations import create_analyst_projection_chart
         try:
             projection_chart = create_analyst_projection_chart(
@@ -787,5 +788,5 @@ def render_analyst_ranking_panel(ratings_result, current_price, ticker="", data=
                 st.markdown("---")
                 st.markdown("### Price Evolution Projections")
                 st.plotly_chart(projection_chart, use_container_width=True)
-        except Exception as e:
+        except Exception:
             pass

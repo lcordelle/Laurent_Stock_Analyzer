@@ -198,6 +198,108 @@ RECOMMENDATION_THRESHOLDS = {
 }
 
 # ===========================================
+# FACTOR GRADE SYSTEM (Seeking Alpha-style)
+# ===========================================
+
+GRADE_PERCENTILE_THRESHOLDS = [
+    (92, "A+"), (85, "A"), (77, "A-"),
+    (69, "B+"), (62, "B"), (54, "B-"),
+    (46, "C+"), (38, "C"), (31, "C-"),
+    (23, "D+"), (15, "D"), (8,  "D-"),
+    (0,  "F"),
+]
+
+GRADE_COLORS = {
+    "A+": "#15803d", "A": "#16a34a", "A-": "#22c55e",
+    "B+": "#65a30d", "B": "#84cc16", "B-": "#a3e635",
+    "C+": "#ca8a04", "C": "#d97706", "C-": "#f59e0b",
+    "D+": "#ea580c", "D": "#dc2626", "D-": "#b91c1c",
+    "F":  "#7f1d1d", "N/A": "#94a3b8",
+}
+
+# Sector median benchmarks for absolute-threshold fallback
+# (when fewer than 3 peers return a valid metric)
+SECTOR_METRIC_MEDIANS = {
+    "Technology": {
+        "pe": 28.0, "fwd_pe": 24.0, "pb": 7.5, "ps": 5.8, "ev_ebitda": 22.0,
+        "revenue_growth": 0.10, "eps_growth": 0.12, "ebitda_growth": 0.11, "fcf_growth": 0.10,
+        "gross_margin": 0.55, "net_margin": 0.18, "roe": 0.25, "roic": 0.18, "fcf_margin": 0.15,
+        "mom_1m": 0.02, "mom_3m": 0.05, "mom_6m": 0.10, "mom_12m": 0.18,
+    },
+    "Financial Services": {
+        "pe": 13.0, "fwd_pe": 11.0, "pb": 1.4, "ps": 2.5, "ev_ebitda": 11.0,
+        "revenue_growth": 0.06, "eps_growth": 0.08, "ebitda_growth": 0.07, "fcf_growth": 0.06,
+        "gross_margin": 0.65, "net_margin": 0.22, "roe": 0.12, "roic": 0.10, "fcf_margin": 0.12,
+        "mom_1m": 0.01, "mom_3m": 0.04, "mom_6m": 0.08, "mom_12m": 0.14,
+    },
+    "Healthcare": {
+        "pe": 22.0, "fwd_pe": 18.0, "pb": 4.0, "ps": 3.5, "ev_ebitda": 16.0,
+        "revenue_growth": 0.07, "eps_growth": 0.09, "ebitda_growth": 0.08, "fcf_growth": 0.07,
+        "gross_margin": 0.58, "net_margin": 0.14, "roe": 0.18, "roic": 0.14, "fcf_margin": 0.13,
+        "mom_1m": 0.01, "mom_3m": 0.03, "mom_6m": 0.07, "mom_12m": 0.12,
+    },
+    "Consumer Cyclical": {
+        "pe": 20.0, "fwd_pe": 17.0, "pb": 4.5, "ps": 1.8, "ev_ebitda": 14.0,
+        "revenue_growth": 0.06, "eps_growth": 0.08, "ebitda_growth": 0.07, "fcf_growth": 0.06,
+        "gross_margin": 0.35, "net_margin": 0.07, "roe": 0.20, "roic": 0.14, "fcf_margin": 0.06,
+        "mom_1m": 0.01, "mom_3m": 0.04, "mom_6m": 0.08, "mom_12m": 0.14,
+    },
+    "Consumer Defensive": {
+        "pe": 22.0, "fwd_pe": 19.0, "pb": 5.0, "ps": 1.5, "ev_ebitda": 15.0,
+        "revenue_growth": 0.04, "eps_growth": 0.06, "ebitda_growth": 0.05, "fcf_growth": 0.05,
+        "gross_margin": 0.38, "net_margin": 0.09, "roe": 0.22, "roic": 0.15, "fcf_margin": 0.07,
+        "mom_1m": 0.00, "mom_3m": 0.02, "mom_6m": 0.05, "mom_12m": 0.10,
+    },
+    "Energy": {
+        "pe": 12.0, "fwd_pe": 10.0, "pb": 1.8, "ps": 1.2, "ev_ebitda": 8.0,
+        "revenue_growth": 0.05, "eps_growth": 0.06, "ebitda_growth": 0.05, "fcf_growth": 0.05,
+        "gross_margin": 0.30, "net_margin": 0.10, "roe": 0.15, "roic": 0.12, "fcf_margin": 0.08,
+        "mom_1m": 0.01, "mom_3m": 0.03, "mom_6m": 0.06, "mom_12m": 0.10,
+    },
+    "Industrials": {
+        "pe": 20.0, "fwd_pe": 17.0, "pb": 4.0, "ps": 2.0, "ev_ebitda": 14.0,
+        "revenue_growth": 0.06, "eps_growth": 0.08, "ebitda_growth": 0.07, "fcf_growth": 0.06,
+        "gross_margin": 0.35, "net_margin": 0.10, "roe": 0.18, "roic": 0.14, "fcf_margin": 0.08,
+        "mom_1m": 0.01, "mom_3m": 0.03, "mom_6m": 0.07, "mom_12m": 0.12,
+    },
+    "Communication Services": {
+        "pe": 20.0, "fwd_pe": 17.0, "pb": 3.5, "ps": 3.0, "ev_ebitda": 14.0,
+        "revenue_growth": 0.08, "eps_growth": 0.10, "ebitda_growth": 0.09, "fcf_growth": 0.08,
+        "gross_margin": 0.50, "net_margin": 0.15, "roe": 0.20, "roic": 0.15, "fcf_margin": 0.14,
+        "mom_1m": 0.01, "mom_3m": 0.04, "mom_6m": 0.08, "mom_12m": 0.14,
+    },
+    "Real Estate": {
+        "pe": 35.0, "fwd_pe": 30.0, "pb": 2.5, "ps": 6.0, "ev_ebitda": 20.0,
+        "revenue_growth": 0.05, "eps_growth": 0.06, "ebitda_growth": 0.05, "fcf_growth": 0.04,
+        "gross_margin": 0.55, "net_margin": 0.20, "roe": 0.08, "roic": 0.06, "fcf_margin": 0.18,
+        "mom_1m": 0.00, "mom_3m": 0.02, "mom_6m": 0.05, "mom_12m": 0.08,
+    },
+    "Utilities": {
+        "pe": 18.0, "fwd_pe": 16.0, "pb": 1.8, "ps": 2.5, "ev_ebitda": 12.0,
+        "revenue_growth": 0.03, "eps_growth": 0.04, "ebitda_growth": 0.03, "fcf_growth": 0.02,
+        "gross_margin": 0.42, "net_margin": 0.15, "roe": 0.10, "roic": 0.07, "fcf_margin": 0.05,
+        "mom_1m": 0.00, "mom_3m": 0.02, "mom_6m": 0.04, "mom_12m": 0.07,
+    },
+    "Basic Materials": {
+        "pe": 15.0, "fwd_pe": 12.0, "pb": 2.5, "ps": 1.5, "ev_ebitda": 10.0,
+        "revenue_growth": 0.05, "eps_growth": 0.06, "ebitda_growth": 0.05, "fcf_growth": 0.04,
+        "gross_margin": 0.28, "net_margin": 0.09, "roe": 0.14, "roic": 0.11, "fcf_margin": 0.07,
+        "mom_1m": 0.01, "mom_3m": 0.03, "mom_6m": 0.06, "mom_12m": 0.10,
+    },
+    "_default": {
+        "pe": 20.0, "fwd_pe": 17.0, "pb": 3.5, "ps": 2.5, "ev_ebitda": 15.0,
+        "revenue_growth": 0.07, "eps_growth": 0.09, "ebitda_growth": 0.08, "fcf_growth": 0.07,
+        "gross_margin": 0.45, "net_margin": 0.12, "roe": 0.15, "roic": 0.12, "fcf_margin": 0.10,
+        "mom_1m": 0.01, "mom_3m": 0.03, "mom_6m": 0.07, "mom_12m": 0.12,
+    },
+}
+
+# Dividend scorecard thresholds
+DIVIDEND_PAYOUT_THRESHOLDS = [0.25, 0.50, 0.70, 0.85]   # A+→A→B→C→D cut-offs
+DIVIDEND_COVERAGE_THRESHOLDS = [5.0, 3.0, 2.0, 1.5]     # interest coverage ratio
+DIVIDEND_DEBT_THRESHOLDS = [0.5, 1.0, 1.5, 2.0]         # debt-to-equity ratio
+
+# ===========================================
 # ADVANCED OPTIONS
 # ===========================================
 
@@ -206,6 +308,24 @@ DEBUG_MODE = False
 
 # Log file location
 LOG_FILE = 'stock_analyzer.log'
+
+# ===========================================
+# LOGGING SETUP
+# ===========================================
+import logging
+import os
+
+_log_level = logging.DEBUG if DEBUG_MODE else logging.INFO
+_handlers = [logging.StreamHandler()]
+if LOG_FILE:
+    _handlers.append(logging.FileHandler(os.path.expanduser(LOG_FILE), mode='a', encoding='utf-8'))
+
+logging.basicConfig(
+    level=_log_level,
+    format='%(asctime)s %(levelname)s %(name)s — %(message)s',
+    handlers=_handlers,
+    force=True,
+)
 
 # Enable data caching
 ENABLE_CACHE = True

@@ -1196,6 +1196,21 @@ def calculate_confidence_score(signals, timeframe_analysis, score):
     total_confidence = sum(confidence_factors)
     return min(100, max(0, total_confidence))
 
+
+def normalize_primary_stance(raw) -> str:
+    """Return BUY, SELL, or HOLD so signal chart and strategy chart always agree."""
+    if raw is None:
+        return 'HOLD'
+    s = str(raw).strip().upper().replace(' ', '_')
+    if s in ('BUY', 'LONG', 'STRONG_BUY'):
+        return 'BUY'
+    if s in ('SELL', 'SHORT', 'STRONG_SELL'):
+        return 'SELL'
+    if s in ('HOLD', 'NEUTRAL', '', 'N/A', 'NA'):
+        return 'HOLD'
+    return 'HOLD'
+
+
 def calculate_trading_signals(hist, intrinsic_value, metrics, score, vwap, support, resistance, 
                               analyzer=None, ticker=None, timeframe_analysis=None):
     """Calculate professional trading buy/sell signals with entry/exit points, multi-timeframe analysis, and confidence scoring"""
@@ -1480,8 +1495,285 @@ def calculate_trading_signals(hist, intrinsic_value, metrics, score, vwap, suppo
         signals['confidence_level'] = 'Low'
     else:
         signals['confidence_level'] = 'Very Low'
+
+    # Single canonical stance for UI + charts (resolves conflicting buy/sell flags)
+    _apply_primary_trading_stance(signals, score, metrics)
     
     return signals
+
+
+UNKNOWN_YAHOO_REC_KEYS = frozenset({'none', 'n/a', 'na', '', 'null', 'undefined'})
+
+
+def _analyst_consensus_boosts(metrics: dict) -> tuple:
+    """
+    Map Yahoo Finance analyst fields (same data users see on Yahoo / often echoed on IBKR)
+    into weights that merge with our rule-based buy/sell scores.
+    recommendationMean: Yahoo scale ~1.0 (strong buy) .. ~5.0 (strong sell); neutral ~3.0.
+
+    Yahoo often returns recommendationKey \"none\" and omits recommendationMean while the web UI
+    still shows Buy — that view leans on mean analyst *target* vs spot. We add a buy/sell tilt from
+    consensus target vs current price when key/mean are missing (see UNKNOWN_YAHOO_REC_KEYS).
+    """
+    if not metrics:
+        return 0.0, 0.0, {}
+    raw = metrics.get('Analyst Rating')
+    key = str(raw or '').lower().strip().replace(' ', '_')
+    mean = metrics.get('recommendationMean')
+    try:
+        mean = float(mean) if mean is not None and str(mean) not in ('', 'nan', 'None') else None
+    except (TypeError, ValueError):
+        mean = None
+    n = 0
+    try:
+        n = int(metrics.get('Number of Analysts') or 0)
+    except (TypeError, ValueError):
+        n = 0
+
+    bb, bs = 0.0, 0.0
+    if key in ('strong_buy',):
+        bb += 3.5
+    elif key in ('buy',):
+        bb += 2.5
+    elif key in ('hold',):
+        bb += 0.2
+        bs += 0.2
+    elif key in ('underperform',):
+        bs += 2.0
+    elif key in ('sell',):
+        bs += 2.5
+    elif key in ('strong_sell',):
+        bs += 3.5
+
+    if mean is not None:
+        # Lower mean = more bullish on Yahoo (e.g. strong_buy often ~1.2–1.8)
+        if mean < 3.0:
+            bb += (3.0 - mean) * 0.75
+        elif mean > 3.0:
+            bs += (mean - 3.0) * 0.75
+
+    detail = {
+        'yahoo_recommendation_key': key or 'n/a',
+        'yahoo_recommendation_mean': mean,
+        'n_analysts': n,
+        'boost_buy': bb,
+        'boost_sell': bs,
+        'target_vs_spot_gap_pct': None,
+        'consensus_source': 'key_and_or_mean',
+    }
+
+    # Target vs spot when Yahoo omits usable key+mean (e.g. APLD: key \"none\", mean None, 11 analysts)
+    key_unknown = key in UNKNOWN_YAHOO_REC_KEYS or raw is None or str(raw).strip().lower() in UNKNOWN_YAHOO_REC_KEYS
+    if mean is None and key_unknown and n >= 1:
+        try:
+            cp = float(metrics.get('Current Price') or 0)
+        except (TypeError, ValueError):
+            cp = 0.0
+        try:
+            tp = float(metrics.get('Target Price') or 0)
+        except (TypeError, ValueError):
+            tp = 0.0
+        if cp > 0 and tp > 0:
+            gap = (tp - cp) / cp
+            detail['target_vs_spot_gap_pct'] = gap * 100.0
+            detail['consensus_source'] = 'target_mean_vs_spot'
+            if gap > 0.03:
+                bb += min(5.0, 1.0 + gap * 6.0)
+            elif gap < -0.03:
+                bs += min(5.0, 1.0 + abs(gap) * 6.0)
+
+    detail['boost_buy'] = bb
+    detail['boost_sell'] = bs
+    return bb, bs, detail
+
+
+def _signal_weight(sig):
+    return {'High': 3.0, 'Medium': 2.0, 'Low': 1.0}.get(sig.get('confidence'), 1.5)
+
+
+def _apply_primary_trading_stance(signals: dict, score: dict = None, metrics: dict = None) -> None:
+    """
+    Set primary_stance BUY|SELL|HOLD. Blends:
+    - Internal rules (technical/value/MACD etc.)
+    - Yahoo Finance analyst consensus (recommendationKey + recommendationMean), same feed as Yahoo UI;
+      brokers like IBKR often show similar analyst aggregates but may differ in UI layout.
+
+    This is not a guarantee of market outcome — always verify independently.
+    """
+    buys = signals.get('buy_signals') or []
+    sells = signals.get('sell_signals') or []
+    ts = float((score or {}).get('total_score', 50) or 50)
+
+    ab, as_, analyst_detail = _analyst_consensus_boosts(metrics or {})
+    signals['analyst_consensus_detail'] = analyst_detail
+    signals['stance_disclaimer'] = (
+        "Blends app rules with Yahoo Finance analyst data. Not investment advice. "
+        "IBKR/Yahoo UIs may label ratings differently — compare recommendationKey/mean to your broker."
+    )
+
+    bw = sum(_signal_weight(s) for s in buys)
+    sw = sum(_signal_weight(s) for s in sells)
+    bw_eff = bw + ab
+    sw_eff = sw + as_
+
+    ym = analyst_detail.get('yahoo_recommendation_mean')
+    yk = analyst_detail.get('yahoo_recommendation_key', 'n/a')
+    mean_s = f"{ym:.2f}" if ym is not None else "n/a"
+
+    if not buys and not sells:
+        # No internal trigger — do not imply a trade; surface Yahoo for context
+        if ab > as_ + 0.75:
+            signals['primary_stance'] = 'HOLD'
+            signals['primary_stance_reason'] = (
+                f"No internal buy/sell rule fired. Yahoo analyst view: {yk.replace('_', ' ')} "
+                f"(mean {mean_s}) — sentiment only; wait for model confirmation or your own thesis."
+            )
+        elif as_ > ab + 0.75:
+            signals['primary_stance'] = 'HOLD'
+            signals['primary_stance_reason'] = (
+                f"No internal rule fired. Yahoo analyst lean: cautious ({yk.replace('_', ' ')}, mean {mean_s}) — "
+                "still no automated entry from this app."
+            )
+        else:
+            signals['primary_stance'] = 'HOLD'
+            signals['primary_stance_reason'] = (
+                'No rule-based buy/sell triggers and neutral Yahoo analyst skew — flat / wait.'
+            )
+        signals['has_conflicting_signals'] = False
+        signals['rule_weights'] = {'buy': bw, 'sell': sw, 'buy_eff': bw_eff, 'sell_eff': sw_eff}
+        signals['primary_stance'] = normalize_primary_stance(signals.get('primary_stance'))
+        return
+
+    signals['rule_weights'] = {'buy': bw, 'sell': sw, 'buy_eff': bw_eff, 'sell_eff': sw_eff}
+
+    if not sells:
+        signals['primary_stance'] = 'BUY'
+        signals['primary_stance_reason'] = _stance_reason_with_analyst(
+            'BUY', bw, sw, bw_eff, sw_eff, ab, as_, ts, True, mean_s, yk
+        )
+        signals['has_conflicting_signals'] = False
+        signals['primary_stance'] = normalize_primary_stance(signals.get('primary_stance'))
+        return
+
+    if not buys:
+        # Sell-only rules: must still compare analyst weight (bw_eff = ab when bw=0) vs sw_eff.
+        # Previously we always SELL here, so Yahoo target/mean never flipped the stance (bug).
+        if bw_eff > sw_eff + 0.51:
+            signals['primary_stance'] = 'BUY'
+            signals['primary_stance_reason'] = (
+                f'Primary: BUY — Yahoo analyst tilt (effective {bw_eff:.1f}) outweighs sell-only rules ({sw_eff:.1f}).'
+            )
+            signals['has_conflicting_signals'] = True
+        elif sw_eff > bw_eff + 0.51:
+            gap_pct = analyst_detail.get('target_vs_spot_gap_pct')
+            n_an = int(analyst_detail.get('n_analysts') or 0)
+            if (
+                gap_pct is not None
+                and gap_pct > 12.0
+                and n_an >= 2
+                and analyst_detail.get('consensus_source') == 'target_mean_vs_spot'
+            ):
+                signals['primary_stance'] = 'HOLD'
+                signals['primary_stance_reason'] = (
+                    f'Primary: HOLD — sell-side rules ({sw:.1f}) but Yahoo mean target ~{gap_pct:.0f}% vs spot '
+                    f'({n_an} analysts; key/mean often blank in API). Website Buy consensus targets upside — '
+                    'not a clean automated short.'
+                )
+                signals['has_conflicting_signals'] = True
+            else:
+                signals['primary_stance'] = 'SELL'
+                signals['primary_stance_reason'] = _stance_reason_with_analyst(
+                    'SELL', bw, sw, bw_eff, sw_eff, ab, as_, ts, True, mean_s, yk
+                )
+                signals['has_conflicting_signals'] = False
+        else:
+            if ts >= 55:
+                signals['primary_stance'] = 'BUY'
+                signals['primary_stance_reason'] = (
+                    f'Primary: BUY — sell-only vs analyst tilt tied ({bw_eff:.1f} vs {sw_eff:.1f}); '
+                    f'score {ts:.0f}/100 breaks tie.'
+                )
+            elif ts <= 45:
+                signals['primary_stance'] = 'SELL'
+                signals['primary_stance_reason'] = (
+                    f'Primary: SELL — sell-only vs analyst tilt tied ({bw_eff:.1f} vs {sw_eff:.1f}); '
+                    f'score {ts:.0f}/100 breaks tie.'
+                )
+            else:
+                signals['primary_stance'] = 'HOLD'
+                signals['primary_stance_reason'] = (
+                    f'Primary: HOLD — sell-only rules vs analyst tilt balanced ({bw_eff:.1f} vs {sw_eff:.1f}); '
+                    f'score {ts:.0f}/100 neutral.'
+                )
+            signals['has_conflicting_signals'] = True
+        signals['primary_stance'] = normalize_primary_stance(signals.get('primary_stance'))
+        return
+
+    # Both sides fired — use effective weights (rules + Yahoo)
+    if bw_eff > sw_eff + 0.51:
+        signals['primary_stance'] = 'BUY'
+        signals['primary_stance_reason'] = _stance_reason_with_analyst(
+            'BUY', bw, sw, bw_eff, sw_eff, ab, as_, ts, bw != sw, mean_s, yk
+        )
+        signals['has_conflicting_signals'] = True
+    elif sw_eff > bw_eff + 0.51:
+        signals['primary_stance'] = 'SELL'
+        signals['primary_stance_reason'] = _stance_reason_with_analyst(
+            'SELL', bw, sw, bw_eff, sw_eff, ab, as_, ts, bw != sw, mean_s, yk
+        )
+        signals['has_conflicting_signals'] = True
+    else:
+        if ts >= 55:
+            signals['primary_stance'] = 'BUY'
+            signals['primary_stance_reason'] = (
+                f'Primary: BUY — effective weights tied ({bw_eff:.1f} vs {sw_eff:.1f} incl. Yahoo); '
+                f'fundamentals score {ts:.0f}/100 breaks tie. Yahoo mean {mean_s} ({yk}).'
+            )
+        elif ts <= 45:
+            signals['primary_stance'] = 'SELL'
+            signals['primary_stance_reason'] = (
+                f'Primary: SELL — effective weights tied ({bw_eff:.1f} vs {sw_eff:.1f} incl. Yahoo); '
+                f'fundamentals score {ts:.0f}/100 breaks tie. Yahoo mean {mean_s} ({yk}).'
+            )
+        else:
+            signals['primary_stance'] = 'HOLD'
+            signals['primary_stance_reason'] = (
+                f'Primary: HOLD — rules conflict ({bw:.1f} vs {sw:.1f}) and after Yahoo blend '
+                f'({bw_eff:.1f} vs {sw_eff:.1f}) remains balanced; score {ts:.0f}/100 neutral. Yahoo {yk} mean {mean_s}.'
+            )
+        signals['has_conflicting_signals'] = True
+
+    signals['primary_stance'] = normalize_primary_stance(signals.get('primary_stance'))
+
+
+def _stance_reason_with_analyst(
+    side: str,
+    bw: float,
+    sw: float,
+    bw_eff: float,
+    sw_eff: float,
+    ab: float,
+    as_: float,
+    ts: float,
+    one_sided_rules: bool,
+    mean_s: str,
+    yk: str,
+) -> str:
+    y_part = f" Yahoo analyst: {yk.replace('_', ' ')} (mean {mean_s})."
+    if one_sided_rules and side == 'BUY':
+        return (
+            f'Buy-side rules lead (rule weight {bw:.1f}; incl. Yahoo boost +{ab:.1f} → effective {bw_eff:.1f} vs {sw_eff:.1f}).'
+            + y_part
+        )
+    if one_sided_rules and side == 'SELL':
+        return (
+            f'Sell-side rules lead (rule weight {sw:.1f}; incl. Yahoo boost +{as_:.1f} → effective {sw_eff:.1f} vs {bw_eff:.1f}).'
+            + y_part
+        )
+    return (
+        f'Primary: {side} — effective weights {bw_eff:.1f} (buy) vs {sw_eff:.1f} (sell) after blending Yahoo consensus.'
+        + y_part
+    )
 
 def create_analyst_projection_chart(data, ratings_result, intrinsic_value=None, current_price=0, ticker=""):
     """
@@ -1520,6 +1812,15 @@ def create_analyst_projection_chart(data, ratings_result, intrinsic_value=None, 
                     target_low = rating.get('target_low', 0)
                 else:
                     target_low = min(target_low, rating.get('target_low', 0))
+
+    # Fallback: Yahoo Finance info on data (ensures chart when ratings list omits fields)
+    info = data.get('info') or {}
+    if target_mean == 0 and info.get('targetMeanPrice'):
+        target_mean = float(info['targetMeanPrice'])
+    if target_high == 0 and info.get('targetHighPrice'):
+        target_high = float(info['targetHighPrice'])
+    if target_low == 0 and info.get('targetLowPrice'):
+        target_low = float(info['targetLowPrice'])
     
     # Use current price if not provided
     if current_price == 0:
@@ -1835,6 +2136,105 @@ def create_analyst_projection_chart(data, ratings_result, intrinsic_value=None, 
     
     return fig
 
+
+def create_analyst_consensus_bar_chart(data, ratings_result=None, metrics=None, ticker=""):
+    """
+    Compact bar chart: analyst Low / Consensus (mean) / High vs current spot.
+    Matches dashboard light theme; complements create_analyst_projection_chart.
+    """
+    if not data or data.get('history') is None or len(data.get('history', [])) == 0:
+        return None
+    hist = data['history']
+    spot = float(hist["Close"].iloc[-1])
+    info = data.get("info") or {}
+
+    target_mean = target_high = target_low = 0.0
+    if ratings_result:
+        ratings_list = ratings_result.get("ratings", [])
+        for rating in ratings_list:
+            tp = rating.get("target_price", 0) or 0
+            if tp > 0:
+                target_mean = tp if target_mean == 0 else (target_mean + tp) / 2
+            th = rating.get("target_high", 0) or 0
+            if th > 0:
+                target_high = max(target_high, th)
+            tl = rating.get("target_low", 0) or 0
+            if tl > 0:
+                target_low = tl if target_low == 0 else min(target_low, tl)
+
+    if target_mean == 0 and info.get("targetMeanPrice"):
+        target_mean = float(info["targetMeanPrice"])
+    if target_high == 0 and info.get("targetHighPrice"):
+        target_high = float(info["targetHighPrice"])
+    if target_low == 0 and info.get("targetLowPrice"):
+        target_low = float(info["targetLowPrice"])
+    if target_mean == 0 and metrics:
+        tm = metrics.get("Target Price")
+        if tm not in (None, 0, "0"):
+            try:
+                target_mean = float(tm)
+            except (TypeError, ValueError):
+                pass
+
+    if target_mean <= 0 and target_high <= 0 and target_low <= 0:
+        return None
+
+    labels, vals, colors = [], [], []
+    if target_low > 0:
+        labels.append("Low")
+        vals.append(target_low)
+        colors.append("#ef4444")
+    if target_mean > 0:
+        labels.append("Consensus")
+        vals.append(target_mean)
+        colors.append("#2563eb")
+    if target_high > 0:
+        labels.append("High")
+        vals.append(target_high)
+        colors.append("#10b981")
+    if not vals:
+        return None
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Bar(
+            x=labels,
+            y=vals,
+            marker_color=colors,
+            text=[f"${v:.2f}" for v in vals],
+            textposition="outside",
+            hovertemplate="%{x}<br>$%{y:.2f}<extra></extra>",
+        )
+    )
+    fig.add_hline(
+        y=spot,
+        line_dash="solid",
+        line_color="#d97706",
+        line_width=2,
+        annotation_text=f"Spot ${spot:.2f}",
+        annotation_position="right",
+        annotation_font=dict(size=11, color="#d97706"),
+    )
+    fig.update_layout(
+        title=dict(
+            text=f"{ticker} — Analyst targets (low / consensus / high) vs spot",
+            font=dict(size=15, color="#0f172a"),
+            x=0,
+            xanchor="left",
+        ),
+        xaxis_title="",
+        yaxis_title="Price ($)",
+        plot_bgcolor="#f8fafc",
+        paper_bgcolor="#ffffff",
+        font=dict(color="#334155", size=12),
+        height=360,
+        margin=dict(t=56, b=48, l=56, r=24),
+        yaxis=dict(gridcolor="#e2e8f0", zeroline=False),
+        showlegend=False,
+    )
+    return fig
+
+
 def create_trading_signals_chart(data, intrinsic_value=None, metrics=None, score=None, analyzer=None):
     """Create professional trading signals chart with buy/sell zones and entry/exit points"""
     if not data:
@@ -1952,7 +2352,9 @@ def create_trading_signals_chart(data, intrinsic_value=None, metrics=None, score
             opacity=1.0
         )
     
-    # Add instructional BUY signals with educational context
+    primary = normalize_primary_stance(trading_signals.get('primary_stance'))
+
+    # Add instructional BUY signals with educational context (fade if not primary)
     if trading_signals['buy_signals']:
         for signal in trading_signals['buy_signals']:
             # Create instructional explanation based on signal type
@@ -2005,17 +2407,18 @@ def create_trading_signals_chart(data, intrinsic_value=None, metrics=None, score
                 <b>📖 Learning tip:</b> Momentum trades can be profitable but require active management.
                 """
             
+            _op_b = 0.92 if primary == 'BUY' else (0.45 if primary == 'HOLD' else 0.28)
             fig.add_trace(go.Scatter(
                 x=[signal['date']],
                 y=[signal['price']],
                 mode='markers+text',
-                name=f"BUY: {signal['type']}",
+                name=f"BUY: {signal['type']}" + ('' if primary == 'BUY' else ' (secondary)'),
                 marker=dict(
                     size=22,
                     color='#2e7d32',
                     symbol='triangle-up',
                     line=dict(width=2.5, color='white'),
-                    opacity=0.9
+                    opacity=_op_b
                 ),
                 text=[instruction.split('<br>')[0]],  # Main label
                 textposition='top right',  # Position to avoid overlap
@@ -2024,7 +2427,7 @@ def create_trading_signals_chart(data, intrinsic_value=None, metrics=None, score
                 showlegend=True
             ))
     
-    # Add instructional SELL signals with educational context
+    # Add instructional SELL signals with educational context (fade if not primary)
     if trading_signals['sell_signals']:
         for signal in trading_signals['sell_signals']:
             # Create instructional explanation based on signal type
@@ -2077,17 +2480,18 @@ def create_trading_signals_chart(data, intrinsic_value=None, metrics=None, score
                 <b>📖 Learning tip:</b> Recognizing trend reversals early helps preserve capital.
                 """
             
+            _op_s = 0.92 if primary == 'SELL' else (0.45 if primary == 'HOLD' else 0.28)
             fig.add_trace(go.Scatter(
                 x=[signal['date']],
                 y=[signal['price']],
                 mode='markers+text',
-                name=f"SELL: {signal['type']}",
+                name=f"SELL: {signal['type']}" + ('' if primary == 'SELL' else ' (secondary)'),
                 marker=dict(
                     size=22,
                     color='#c62828',
                     symbol='triangle-down',
                     line=dict(width=2.5, color='white'),
-                    opacity=0.9
+                    opacity=_op_s
                 ),
                 text=[instruction.split('<br>')[0]],  # Main label
                 textposition='bottom left',  # Position to avoid overlap
@@ -2235,9 +2639,13 @@ def create_trading_signals_chart(data, intrinsic_value=None, metrics=None, score
                 hovertemplate='<b>RESISTANCE REJECTION</b><br>Date: %{x}<br>Price: $%{y:.2f}<br>Price rejected at resistance level<extra></extra>'
             ))
     
-    # Update layout
+    # Update layout — title matches strategy chart primary stance
+    _conf = " · conflicting rules resolved" if trading_signals.get('has_conflicting_signals') else ""
     fig.update_layout(
-        title=f'{ticker} Professional Trading Signals - Buy/Sell Zones',
+        title=(
+            f'{ticker} — Primary stance: {primary} | Pro trading signals'
+            f'{_conf} (bright = primary, faded = secondary)'
+        ),
         yaxis_title='Price ($)',
         xaxis_title='Date',
         height=700,
@@ -2255,3 +2663,148 @@ def create_trading_signals_chart(data, intrinsic_value=None, metrics=None, score
     
     return fig, trading_signals
 
+
+
+
+# =============================================================================
+# FINANCIAL HISTORY CHARTS  (Seeking Alpha-style annual history)
+# =============================================================================
+
+def create_financial_history_chart(financials, cashflow, chart_type="revenue"):
+    """
+    Render annual financial history bar chart.
+    chart_type: "revenue" | "earnings" | "margins" | "fcf"
+    """
+    import pandas as pd
+    import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
+
+    BLUE = "#1d4ed8"
+    GREEN = "#10b981"
+    RED = "#ef4444"
+    AMBER = "#f59e0b"
+    PURPLE = "#8b5cf6"
+
+    def _row(df, *keys):
+        if df is None or df.empty:
+            return None
+        for k in keys:
+            try:
+                row = df.loc[k]
+                return row.dropna().sort_index()
+            except Exception:
+                pass
+        return None
+
+    def _safe_div_series(a, b):
+        try:
+            return (a / b).replace([float("inf"), float("-inf")], None).dropna()
+        except Exception:
+            return None
+
+    if chart_type == "revenue":
+        rev = _row(financials, "Total Revenue", "TotalRevenue")
+        if rev is None or rev.empty:
+            return None
+        fig = make_subplots(specs=[[{"secondary_y": True}]])
+        labels = [str(d.year) if hasattr(d, "year") else str(d) for d in rev.index]
+        fig.add_trace(go.Bar(
+            x=labels, y=rev.values / 1e9,
+            name="Revenue ($B)", marker_color=BLUE, opacity=0.85,
+        ), secondary_y=False)
+        yoy = rev.pct_change(-1) * 100  # compare to prior year (columns go newest→oldest)
+        fig.add_trace(go.Scatter(
+            x=labels, y=yoy.values,
+            name="YoY Growth %", mode="lines+markers",
+            line=dict(color=GREEN, width=2), marker=dict(size=6),
+        ), secondary_y=True)
+        fig.update_yaxes(title_text="Revenue ($B)", secondary_y=False)
+        fig.update_yaxes(title_text="YoY Growth %", secondary_y=True, ticksuffix="%")
+        title = "Annual Revenue History"
+
+    elif chart_type == "earnings":
+        ni = _row(financials, "Net Income", "NetIncome", "Net Income Common Stockholders")
+        if ni is None or ni.empty:
+            return None
+        fig = make_subplots(specs=[[{"secondary_y": True}]])
+        labels = [str(d.year) if hasattr(d, "year") else str(d) for d in ni.index]
+        colors = [GREEN if v >= 0 else RED for v in ni.values]
+        fig.add_trace(go.Bar(
+            x=labels, y=ni.values / 1e9,
+            name="Net Income ($B)", marker_color=colors, opacity=0.85,
+        ), secondary_y=False)
+        # EPS if available
+        eps = _row(financials, "Diluted EPS", "Basic EPS", "EPS")
+        if eps is not None:
+            fig.add_trace(go.Scatter(
+                x=labels, y=eps.values,
+                name="EPS", mode="lines+markers",
+                line=dict(color=AMBER, width=2), marker=dict(size=6),
+            ), secondary_y=True)
+        fig.update_yaxes(title_text="Net Income ($B)", secondary_y=False)
+        fig.update_yaxes(title_text="EPS ($)", secondary_y=True)
+        title = "Annual Earnings History"
+
+    elif chart_type == "margins":
+        rev = _row(financials, "Total Revenue", "TotalRevenue")
+        gp = _row(financials, "Gross Profit", "GrossProfit")
+        oi = _row(financials, "Operating Income", "OperatingIncome", "EBIT")
+        ni = _row(financials, "Net Income", "NetIncome")
+        if rev is None or rev.empty:
+            return None
+        fig = go.Figure()
+        labels = [str(d.year) if hasattr(d, "year") else str(d) for d in rev.index]
+        for series, name, color in [
+            (gp, "Gross Margin", BLUE),
+            (oi, "Operating Margin", GREEN),
+            (ni, "Net Margin", AMBER),
+        ]:
+            if series is not None:
+                margin = _safe_div_series(series, rev) * 100
+                if margin is not None:
+                    fig.add_trace(go.Scatter(
+                        x=labels, y=margin.values,
+                        name=name, mode="lines+markers",
+                        line=dict(color=color, width=2), marker=dict(size=6),
+                    ))
+        fig.update_yaxes(title_text="Margin %", ticksuffix="%")
+        title = "Annual Margin History"
+
+    elif chart_type == "fcf":
+        fcf = _row(cashflow, "Free Cash Flow", "FreeCashFlow")
+        rev = _row(financials, "Total Revenue", "TotalRevenue")
+        if fcf is None or fcf.empty:
+            return None
+        fig = make_subplots(specs=[[{"secondary_y": True}]])
+        labels = [str(d.year) if hasattr(d, "year") else str(d) for d in fcf.index]
+        colors = [GREEN if v >= 0 else RED for v in fcf.values]
+        fig.add_trace(go.Bar(
+            x=labels, y=fcf.values / 1e9,
+            name="Free Cash Flow ($B)", marker_color=colors, opacity=0.85,
+        ), secondary_y=False)
+        if rev is not None:
+            fcf_margin = _safe_div_series(fcf, rev) * 100
+            if fcf_margin is not None:
+                fig.add_trace(go.Scatter(
+                    x=labels, y=fcf_margin.values,
+                    name="FCF Margin %", mode="lines+markers",
+                    line=dict(color=PURPLE, width=2), marker=dict(size=6),
+                ), secondary_y=True)
+        fig.update_yaxes(title_text="Free Cash Flow ($B)", secondary_y=False)
+        fig.update_yaxes(title_text="FCF Margin %", secondary_y=True, ticksuffix="%")
+        title = "Annual Free Cash Flow History"
+
+    else:
+        return None
+
+    fig.update_layout(
+        title=title,
+        template="plotly_white",
+        height=320,
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        margin=dict(l=0, r=0, t=40, b=0),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        hovermode="x unified",
+    )
+    return fig

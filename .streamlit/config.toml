@@ -1,0 +1,22 @@
+# Streamlit — tuned for ngrok + mobile Safari (iPad/iPhone)
+# CLI flags in start_with_remote.sh still override where duplicated.
+
+[global]
+developmentMode = false
+
+[server]
+headless = true
+enableCORS = false
+enableXsrfProtection = false
+maxUploadSize = 200
+# Some mobile networks / proxies mishandle WS compression; disabling improves reliability.
+enableWebsocketCompression = false
+# Avoid surprise reloads when files change on disk while tunneling.
+fileWatcherType = "none"
+
+[browser]
+gatherUsageStats = false
+
+[runner]
+# High-latency remote links: fewer overlapping reruns = fewer half-broken states.
+fastReruns = false

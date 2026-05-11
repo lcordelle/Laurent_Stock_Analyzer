@@ -25,6 +25,10 @@ from utils.metric_display import display_enhanced_metric
 from components.styling import apply_platform_theme, render_header, render_footer, render_trading_signal_card, render_buy_sell_badge, render_analyst_ranking_panel
 from components.navigation import render_top_navigation
 from components.outcome_sections import render_outcome_sections
+from utils.factor_grades import compute_factor_grades
+from utils.dividend_scorecard import compute_dividend_scorecard
+from utils.earnings_analysis import fetch_earnings_data
+from utils.ai_analyst import generate_analyst_report_full
 
 require_auth()
 
@@ -67,7 +71,7 @@ show_technical = st.session_state.get('show_technical', True)
 show_fundamentals = st.session_state.get('show_fundamentals', True)
 
 # Header
-render_header("Single Stock Analysis", "Comprehensive analysis with trading signals")
+render_header("Single stock analysis", "Dashboard · forecast · signals — same layout as batch & screener")
 
 # Input section with form for Enter key submission
 with st.form("single_analysis_form", clear_on_submit=False):
@@ -99,16 +103,10 @@ if submitted and ticker:
             except:
                 pass  # If valuation fails, continue without fair value tunnel
             
-            # Display company info
-            st.subheader(f"{data['info'].get('longName', ticker)} ({ticker})")
-            st.write(data['info'].get('longBusinessSummary', 'No description available')[:500] + '...')
-            
-            st.markdown("---")
-            
             # Get news articles
             news_articles = []
             try:
-                news_articles = news_market.get_stock_news(ticker, limit=5)
+                news_articles = news_market.get_stock_news(ticker, limit=10)
             except Exception as e:
                 pass
             
@@ -128,7 +126,45 @@ if submitted and ticker:
             except Exception as e:
                 pass
             
-            # Render outcome sections with clickable boxes
+            # Compute new Seeking Alpha-style features
+            sector = (data.get("info") or {}).get("sector", "") or ""
+            company_name = (data.get("info") or {}).get("longName", ticker) or ticker
+
+            factor_grades = None
+            try:
+                factor_grades = compute_factor_grades(ticker, sector)
+            except Exception as e:
+                st.warning(f"Factor grades error: {e}")
+
+            dividend_scorecard = None
+            try:
+                dividend_scorecard = compute_dividend_scorecard(ticker, sector)
+            except Exception as e:
+                st.warning(f"Dividend scorecard error: {e}")
+
+            earnings_data = None
+            try:
+                earnings_data = fetch_earnings_data(ticker)
+            except Exception as e:
+                st.warning(f"Earnings data error: {e}")
+
+            analyst_report = None
+            try:
+                analyst_report = generate_analyst_report_full(
+                    ticker=ticker,
+                    company_name=company_name,
+                    sector=sector,
+                    metrics=metrics or {},
+                    score=score or {},
+                    factor_grades=factor_grades,
+                    earnings_data=earnings_data,
+                    dividend_scorecard=dividend_scorecard,
+                    short_interest=None,
+                )
+            except Exception as e:
+                st.warning(f"AI analyst error: {e}")
+
+            # Render outcome sections
             render_outcome_sections(
                 ticker=ticker,
                 data=data,
@@ -138,7 +174,11 @@ if submitted and ticker:
                 intrinsic_value=intrinsic_value,
                 news_articles=news_articles,
                 ratings_result=ratings_result,
-                trading_signals=trading_signals_data
+                trading_signals=trading_signals_data,
+                factor_grades=factor_grades,
+                dividend_scorecard=dividend_scorecard,
+                earnings_data=earnings_data,
+                analyst_report=analyst_report,
             )
         else:
             st.error(f"❌ Error fetching data for {ticker}")

@@ -85,21 +85,21 @@ class RatingsAggregator:
             # Aggregate from available data
             recommendation = info.get('recommendationKey', 'hold')
             recommendation_mean = info.get('recommendationMean', 3.0)
-            
-            if recommendation_mean >= 4.5:
+            # Yahoo recommendationMean: lower = more bullish (~1 strong buy .. ~5 strong sell)
+            if recommendation_mean <= 1.5:
                 rating = 'STRONG BUY'
                 rating_score = 5
-            elif recommendation_mean >= 3.5:
+            elif recommendation_mean <= 2.5:
                 rating = 'BUY'
                 rating_score = 4
-            elif recommendation_mean >= 2.5:
+            elif recommendation_mean <= 3.5:
                 rating = 'HOLD'
                 rating_score = 3
-            elif recommendation_mean >= 1.5:
+            elif recommendation_mean <= 4.5:
                 rating = 'UNDERPERFORM'
                 rating_score = 2
             else:
-                rating = 'SELL'
+                rating = 'STRONG SELL'
                 rating_score = 1
             
             return {

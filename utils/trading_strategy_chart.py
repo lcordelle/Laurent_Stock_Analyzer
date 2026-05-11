@@ -7,6 +7,9 @@ import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
 
+from utils.visualizations import normalize_primary_stance
+
+
 def create_trading_strategy_chart(data, trading_signals=None, intrinsic_value=None, metrics=None, score=None):
     """
     Create a comprehensive trading strategy chart showing:
@@ -38,9 +41,14 @@ def create_trading_strategy_chart(data, trading_signals=None, intrinsic_value=No
     
     fig = go.Figure()
     
-    # Determine if this is a BUY or SELL strategy
-    is_buy_strategy = len(trading_signals.get('buy_signals', [])) > 0
-    is_sell_strategy = len(trading_signals.get('sell_signals', [])) > 0
+    # Align with signal chart: same normalized primary_stance (never infer SELL from a bad else-branch)
+    primary = normalize_primary_stance(trading_signals.get('primary_stance'))
+    if primary == 'BUY':
+        is_buy_strategy, is_sell_strategy = True, False
+    elif primary == 'SELL':
+        is_buy_strategy, is_sell_strategy = False, True
+    else:
+        is_buy_strategy, is_sell_strategy = False, False
     
     # Get entry price
     entry_price = current_price
@@ -74,6 +82,8 @@ def create_trading_strategy_chart(data, trading_signals=None, intrinsic_value=No
             stop_loss_price = support * 0.98  # Just below support
         elif is_sell_strategy and resistance:
             stop_loss_price = resistance * 1.02  # Just above resistance
+        elif not is_buy_strategy and not is_sell_strategy:
+            stop_loss_price = entry_price * 0.97  # HOLD: light reference only
         else:
             # Default: 5% stop loss
             if is_buy_strategy:
@@ -109,6 +119,11 @@ def create_trading_strategy_chart(data, trading_signals=None, intrinsic_value=No
                 {'price': tp2, 'label': f'TP2: ${tp2:.2f} (-10%)', 'target': '10%'},
                 {'price': tp3, 'label': f'TP3: ${tp3:.2f} (-15% or Support)', 'target': '15%'}
             ]
+        elif not is_buy_strategy and not is_sell_strategy:
+            take_profit_targets = [
+                {'price': entry_price * 1.03, 'label': f'Upside ref: ${entry_price * 1.03:.2f}', 'target': 'ref'},
+                {'price': entry_price * 0.97, 'label': f'Downside ref: ${entry_price * 0.97:.2f}', 'target': 'ref'},
+            ]
     
     # Sort TP targets (ascending for buy, descending for sell)
     if take_profit_targets:
@@ -130,18 +145,14 @@ def create_trading_strategy_chart(data, trading_signals=None, intrinsic_value=No
         decreasing_line_color='#ef5350'
     ))
     
-    # Add risk zone (red shaded area) - from entry to stop loss
-    if stop_loss_price:
+    # Risk / reward bands only when primary is directional (HOLD = no shaded zones)
+    if stop_loss_price and (is_buy_strategy or is_sell_strategy):
         if is_buy_strategy:
-            # For buy: risk zone is below entry (stop loss below)
             risk_zone_top = entry_price
             risk_zone_bottom = stop_loss_price
         else:
-            # For sell: risk zone is above entry (stop loss above)
             risk_zone_top = stop_loss_price
             risk_zone_bottom = entry_price
-        
-        # Create risk zone rectangle
         fig.add_shape(
             type="rect",
             x0=dates[0],
@@ -152,20 +163,15 @@ def create_trading_strategy_chart(data, trading_signals=None, intrinsic_value=No
             line=dict(width=0),
             layer="below"
         )
-    
-    # Add profit zone (green shaded area) - from entry to TP3
-    if take_profit_targets:
+
+    if take_profit_targets and (is_buy_strategy or is_sell_strategy):
         tp3_price = take_profit_targets[-1]['price']
         if is_buy_strategy:
-            # For buy: profit zone is above entry
             profit_zone_bottom = entry_price
             profit_zone_top = tp3_price
         else:
-            # For sell: profit zone is below entry
             profit_zone_top = entry_price
             profit_zone_bottom = tp3_price
-        
-        # Create profit zone rectangle
         fig.add_shape(
             type="rect",
             x0=dates[0],
@@ -177,28 +183,44 @@ def create_trading_strategy_chart(data, trading_signals=None, intrinsic_value=No
             layer="below"
         )
     
+    # Entry line colors follow primary stance (same as pro signal chart)
+    if primary == 'HOLD':
+        signal_text = "HOLD"
+        signal_color = "#64748b"
+        sym = 'circle'
+    elif primary == 'BUY':
+        signal_text = "BUY"
+        signal_color = "#3b82f6"
+        sym = 'triangle-up'
+    elif primary == 'SELL':
+        signal_text = "SELL"
+        signal_color = "#ef4444"
+        sym = 'triangle-down'
+    else:
+        signal_text = "HOLD"
+        signal_color = "#64748b"
+        sym = 'circle'
+
     # Add Entry line and annotation - position on left, bottom with offset
     fig.add_hline(
         y=entry_price,
         line_dash="solid",
-        line_color="#3b82f6" if is_buy_strategy else "#ef4444",
+        line_color=signal_color,
         line_width=3,
-        annotation_text=f"Entry: ${entry_price:.2f}",
+        annotation_text=f"Entry / {signal_text}: ${entry_price:.2f}",
         annotation_position="left",
         annotation_yanchor="bottom",
         annotation_y=0,
         annotation_x=0.05,  # Position away from edge
-        annotation_font=dict(size=12, color="#3b82f6" if is_buy_strategy else "#ef4444", family="Arial Black"),
+        annotation_font=dict(size=12, color=signal_color, family="Arial Black"),
         annotation_bgcolor="rgba(255, 255, 255, 0.95)",
-        annotation_bordercolor="#3b82f6" if is_buy_strategy else "#ef4444",
+        annotation_bordercolor=signal_color,
         annotation_borderwidth=2,
         annotation_borderpad=4,
         opacity=1.0
     )
     
-    # Add Entry signal marker
-    signal_text = "BUY" if is_buy_strategy else "SELL"
-    signal_color = "#3b82f6" if is_buy_strategy else "#ef4444"
+    # Add Entry signal marker (matches primary_stance, not conflicting raw flags)
     fig.add_trace(go.Scatter(
         x=[entry_date],
         y=[entry_price],
@@ -207,7 +229,7 @@ def create_trading_strategy_chart(data, trading_signals=None, intrinsic_value=No
         marker=dict(
             size=25,
             color=signal_color,
-            symbol='triangle-up' if is_buy_strategy else 'triangle-down',
+            symbol=sym,
             line=dict(width=4, color='white'),
             opacity=1.0
         ),
@@ -306,13 +328,25 @@ def create_trading_strategy_chart(data, trading_signals=None, intrinsic_value=No
     support, resistance = calculate_support_resistance(hist)
     
     # Add rationale annotation box
-    rationale_text = _build_rationale_text(trading_signals, entry_price, stop_loss_price, take_profit_targets, 
-                                          is_buy_strategy, intrinsic_value, support, resistance)
+    rationale_text = _build_rationale_text(
+        trading_signals,
+        entry_price,
+        stop_loss_price,
+        take_profit_targets,
+        is_buy_strategy,
+        is_sell_strategy,
+        intrinsic_value,
+        support,
+        resistance,
+    )
     
     # Update layout
+    prim_note = ""
+    if trading_signals.get('has_conflicting_signals'):
+        prim_note = " (conflicting rules resolved to primary stance)"
     fig.update_layout(
         title={
-            'text': f'{ticker} - Trading Strategy: {signal_text} Signal',
+            'text': f'{ticker} — Trading strategy: {signal_text}{prim_note}',
             'x': 0.5,
             'xanchor': 'center',
             'font': {'size': 18, 'color': signal_color}
@@ -352,22 +386,33 @@ def create_trading_strategy_chart(data, trading_signals=None, intrinsic_value=No
     
     return fig
 
-def _build_rationale_text(trading_signals, entry_price, stop_loss_price, take_profit_targets, 
-                          is_buy_strategy, intrinsic_value, support, resistance):
+def _build_rationale_text(
+    trading_signals,
+    entry_price,
+    stop_loss_price,
+    take_profit_targets,
+    is_buy_strategy,
+    is_sell_strategy,
+    intrinsic_value,
+    support,
+    resistance,
+):
     """Build rationale text explaining the trading strategy"""
     rationale_parts = []
-    
-    rationale_parts.append(f"<b>STRATEGY RATIONALE:</b><br>")
-    
-    # Entry reason
+    primary = normalize_primary_stance(trading_signals.get('primary_stance'))
+    rationale_parts.append(f"<b>STRATEGY RATIONALE (primary: {primary}):</b><br>")
+    if trading_signals.get('primary_stance_reason'):
+        rationale_parts.append(f"• {trading_signals['primary_stance_reason']}<br>")
+
+    # Entry reason — use same side as primary stance
     if trading_signals.get('buy_signals') and is_buy_strategy:
         best_buy = min(trading_signals['buy_signals'], key=lambda x: x['price'])
         rationale_parts.append(f"• <b>Entry:</b> {best_buy.get('reason', 'Buy signal triggered')}<br>")
-    elif trading_signals.get('sell_signals') and not is_buy_strategy:
+    elif trading_signals.get('sell_signals') and is_sell_strategy:
         best_sell = max(trading_signals['sell_signals'], key=lambda x: x['price'])
         rationale_parts.append(f"• <b>Entry:</b> {best_sell.get('reason', 'Sell signal triggered')}<br>")
     else:
-        rationale_parts.append(f"• <b>Entry:</b> Based on current market conditions<br>")
+        rationale_parts.append(f"• <b>Entry:</b> Spot / no primary directional edge — monitor levels.<br>")
     
     # Stop Loss rationale
     if stop_loss_price:
@@ -395,8 +440,18 @@ def _build_rationale_text(trading_signals, entry_price, stop_loss_price, take_pr
     if resistance:
         rationale_parts.append(f"• <b>Resistance:</b> ${resistance:.2f}<br>")
     if intrinsic_value:
-        discount = ((intrinsic_value - entry_price) / entry_price * 100) if is_buy_strategy else ((entry_price - intrinsic_value) / intrinsic_value * 100)
-        rationale_parts.append(f"• <b>Fair Value:</b> ${intrinsic_value:.2f} ({abs(discount):.1f}% {'discount' if is_buy_strategy else 'premium'})<br>")
+        if primary == 'BUY':
+            discount = ((intrinsic_value - entry_price) / entry_price * 100)
+            rationale_parts.append(
+                f"• <b>Fair Value:</b> ${intrinsic_value:.2f} ({abs(discount):.1f}% vs spot — discount lens)<br>"
+            )
+        elif primary == 'SELL':
+            discount = ((entry_price - intrinsic_value) / intrinsic_value * 100)
+            rationale_parts.append(
+                f"• <b>Fair Value:</b> ${intrinsic_value:.2f} ({abs(discount):.1f}% vs spot — premium lens)<br>"
+            )
+        else:
+            rationale_parts.append(f"• <b>Fair Value:</b> ${intrinsic_value:.2f} (reference only in HOLD)<br>")
     
     # Confidence
     confidence = trading_signals.get('confidence_score', 0)

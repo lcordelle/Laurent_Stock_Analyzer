@@ -1,45 +1,41 @@
-# 📱 Remote Access Guide - iPhone/iPad Connection
+# 📱 Remote Access Guide - Connect via laurent.ngrok.io
 
-## 🚀 Quick Start (Easiest Method)
+## 🚀 Quick Start — laurent.ngrok.io (Recommended)
 
-### Option 1: LocalTunnel (FREE, No Signup Required) ⭐ RECOMMENDED
+Your app is configured to run at **https://laurent.ngrok.io** — same URL every time, works from any device.
+
+1. **First-time setup** (once only):
+   ```bash
+   ./setup_remote_access.sh
+   ```
+   Or manually: install ngrok, sign up at [dashboard.ngrok.com](https://dashboard.ngrok.com/signup), run `ngrok config add-authtoken YOUR_TOKEN`.
+   
+   > **Note:** Custom domain `laurent.ngrok.io` requires an ngrok paid plan (Reserved Domains). Add it at [dashboard.ngrok.com/cloud-edge/domains](https://dashboard.ngrok.com/cloud-edge/domains).
+
+2. **Start the app and tunnel:**
+   ```bash
+   ./start_with_remote.sh
+   ```
+
+3. **Connect from any device** — iPhone, iPad, or computer:
+   ```
+   https://laurent.ngrok.io
+   ```
+
+**Or double-click:** `START_PERMANENT.command` (keeps Mac awake + tunnel running)
+
+---
+
+### Option 2: LocalTunnel (FREE, No Signup — URL Changes Each Time)
 
 1. **Run the setup script:**
    ```bash
    ./start_with_localtunnel.sh
    ```
 
-2. **Wait for the URL to appear** (looks like: `https://xxxxx.loca.lt`)
+2. **Wait for the URL to appear** (e.g. `https://xxxxx.loca.lt`)
 
-3. **Open that URL on your iPhone/iPad** - works from anywhere!
-
-**That's it!** No firewall issues, no network configuration needed.
-
----
-
-### Option 2: ngrok (More Reliable, Free Account Required)
-
-1. **First time setup:**
-   ```bash
-   ./setup_remote_access.sh
-   ```
-   
-   Or manually:
-   - Install: `brew install ngrok/ngrok/ngrok`
-   - Sign up at https://dashboard.ngrok.com/signup (free)
-   - Get authtoken: https://dashboard.ngrok.com/get-started/your-authtoken
-   - Run: `ngrok config add-authtoken YOUR_TOKEN`
-
-2. **Start the app with ngrok (one command):**
-   ```bash
-   ./start_with_remote.sh
-   ```
-   
-   This starts Streamlit on port 8501 and creates a public ngrok URL.
-
-3. **Use the public URL** (e.g. `https://abc123.ngrok-free.app`) on any device — iPhone, iPad, or computer.
-
-4. **ngrok config:** Uses permanent domain `laurent.ngrok.io` — same URL every time.
+3. **Open that URL on your iPhone/iPad** — works from anywhere!
 
 ---
 
@@ -73,24 +69,24 @@
 - ✅ **Works from anywhere** - Not limited to same WiFi
 - ⚠️ URLs change each time (but that's fine for personal use)
 
-### ngrok
-- ✅ **More reliable** - Better uptime
-- ✅ **Stable URLs** - Can get fixed URLs with paid plan
-- ✅ **Dashboard** - View requests at http://localhost:4040
-- ⚠️ Requires free account signup
+### ngrok (laurent.ngrok.io)
+- ✅ **Same URL every time** - https://laurent.ngrok.io
+- ✅ **Works from anywhere** - iPhone, iPad, any network
+- ✅ **Dashboard** - View traffic at http://localhost:4040
+- ⚠️ Requires ngrok account + paid plan for custom domain
 
 ---
 
 ## 🎯 Recommended Workflow
 
-1. **Use LocalTunnel for quick access:**
+1. **Use laurent.ngrok.io for reliable remote access:**
    ```bash
-   ./start_with_localtunnel.sh
+   ./start_with_remote.sh
    ```
 
-2. **Bookmark the URL on your iPhone/iPad** for easy access
+2. **Bookmark https://laurent.ngrok.io** on your iPhone/iPad for one-tap access
 
-3. **If you need a permanent URL**, use ngrok with a fixed domain
+3. **Keep the terminal window open** — the tunnel runs while the script is active
 
 ---
 
@@ -99,6 +95,14 @@
 - **Add to Home Screen:** Once you have the URL, add it to your iPhone/iPad home screen for one-tap access
 - **Keep Terminal Open:** The script needs to keep running to maintain the tunnel
 - **Same URL Works Everywhere:** Use the same URL on iPhone, iPad, or any device
+
+### iPad / Safari reliability
+
+- **`./start_with_remote.sh` now waits** for Streamlit `/_stcore/health`, then ngrok’s local API, then retries your public URL — fewer “blank or half-loaded” sessions.
+- **Project `.streamlit/config.toml`** turns off WebSocket compression and slows overlapping reruns — better on high-latency or flaky mobile networks.
+- If a tab **stalls**: pull to refresh, or **force-close Safari** and reopen the bookmark (Safari sometimes suspends background tabs).
+- **Low Power Mode** and **Screen Time** limits can throttle background network; keep the tab in the foreground while analyzing.
+- **Ngrok free tier** can rate-limit or drop long idle sessions — if the URL fails after hours, restart the script.
 
 ---
 

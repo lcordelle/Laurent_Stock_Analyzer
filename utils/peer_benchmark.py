@@ -58,9 +58,9 @@ class PeerBenchmark:
             if not peers:
                 return None
             
-            # Get data for main stock
+            # Get data for main stock (uppercase ticker matches filter below)
             main_stock = {
-                'ticker': ticker,
+                'ticker': ticker.upper() if isinstance(ticker, str) else ticker,
                 'score': score.get('total_score', 0),
                 'pe_ratio': metrics.get('P/E Ratio', 0),
                 'roe': metrics.get('ROE', 0),

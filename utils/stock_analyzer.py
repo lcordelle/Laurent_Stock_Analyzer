@@ -4,6 +4,7 @@ Handles all stock data fetching, scoring, and analysis logic
 Simplified for local use with Yahoo Finance
 """
 
+import logging
 import yfinance as yf
 from utils.ticker_resolver import resolve_to_ticker
 import pandas as pd
@@ -11,6 +12,8 @@ import numpy as np
 import warnings
 import time
 warnings.filterwarnings('ignore')
+
+logger = logging.getLogger(__name__)
 
 class StockAnalyzer:
     """Advanced Stock Analysis Engine"""
@@ -42,33 +45,38 @@ class StockAnalyzer:
             
             # Check if we got valid data
             if hist is None or len(hist) == 0:
-                return None
-            
+                logger.warning("No price history found for ticker: %s", ticker)
+                return {"error": "no_data", "ticker": ticker}
+
             # Fetch additional data
             try:
                 info = stock.info
-            except:
+            except Exception as e:
+                logger.warning("Failed to fetch info for %s: %s", ticker, e)
                 info = {}
-            
+
             try:
                 financials = stock.financials
                 if financials is None:
                     financials = pd.DataFrame()
-            except:
+            except Exception as e:
+                logger.warning("Failed to fetch financials for %s: %s", ticker, e)
                 financials = pd.DataFrame()
-            
+
             try:
                 balance_sheet = stock.balance_sheet
                 if balance_sheet is None:
                     balance_sheet = pd.DataFrame()
-            except:
+            except Exception as e:
+                logger.warning("Failed to fetch balance sheet for %s: %s", ticker, e)
                 balance_sheet = pd.DataFrame()
-            
+
             try:
                 cash_flow = stock.cashflow
                 if cash_flow is None:
                     cash_flow = pd.DataFrame()
-            except:
+            except Exception as e:
+                logger.warning("Failed to fetch cash flow for %s: %s", ticker, e)
                 cash_flow = pd.DataFrame()
             
             # Return data
@@ -90,11 +98,12 @@ class StockAnalyzer:
             
             return result
         except Exception as e:
-            return None
-    
+            logger.error("Failed to fetch data for ticker %s: %s", ticker, e)
+            return {"error": str(e), "ticker": ticker}
+
     def calculate_score(self, data):
         """Calculate comprehensive stock score (0-100)"""
-        if not data:
+        if not data or "error" in data:
             return None
         
         info = data['info']
@@ -104,102 +113,123 @@ class StockAnalyzer:
         
         # Profitability Score (25 points)
         try:
-            gross_margin = info.get('grossMargins', 0) * 100
-            if gross_margin > 60:
-                score += 25
-                components['Gross Margin'] = 25
-            elif gross_margin > 40:
-                score += 15
-                components['Gross Margin'] = 15
-            elif gross_margin > 20:
-                score += 10
-                components['Gross Margin'] = 10
+            gm = info.get('grossMargins')
+            if gm is not None and not pd.isna(gm):
+                gross_margin = float(gm) * 100
+                if gross_margin > 60:
+                    score += 25; components['Gross Margin'] = 25
+                elif gross_margin > 40:
+                    score += 15; components['Gross Margin'] = 15
+                elif gross_margin > 20:
+                    score += 10; components['Gross Margin'] = 10
+                else:
+                    score += 5; components['Gross Margin'] = 5
             else:
-                components['Gross Margin'] = 5
-                score += 5
-        except:
+                components['Gross Margin'] = 0
+        except (TypeError, ValueError, AttributeError) as e:
+            logger.warning("Gross margin scoring failed: %s", e)
             components['Gross Margin'] = 0
-        
+
         # ROE Score (20 points)
         try:
-            roe = info.get('returnOnEquity', 0) * 100
-            if roe > 20:
-                score += 20
-                components['ROE'] = 20
-            elif roe > 15:
-                score += 15
-                components['ROE'] = 15
-            elif roe > 10:
-                score += 10
-                components['ROE'] = 10
+            roe_raw = info.get('returnOnEquity')
+            if roe_raw is not None and not pd.isna(roe_raw):
+                roe = float(roe_raw) * 100
+                if roe > 20:
+                    score += 20; components['ROE'] = 20
+                elif roe > 15:
+                    score += 15; components['ROE'] = 15
+                elif roe > 10:
+                    score += 10; components['ROE'] = 10
+                else:
+                    score += 5; components['ROE'] = 5
             else:
-                components['ROE'] = 5
-                score += 5
-        except:
+                components['ROE'] = 0
+        except (TypeError, ValueError, AttributeError) as e:
+            logger.warning("ROE scoring failed: %s", e)
             components['ROE'] = 0
-        
+
         # FCF Margin Score (20 points)
         try:
-            fcf_margin = info.get('freeCashflow', 0) / info.get('totalRevenue', 1) * 100
-            if fcf_margin > 15:
-                score += 20
-                components['FCF Margin'] = 20
-            elif fcf_margin > 10:
-                score += 15
-                components['FCF Margin'] = 15
-            elif fcf_margin > 5:
-                score += 10
-                components['FCF Margin'] = 10
+            fcf = info.get('freeCashflow')
+            rev = info.get('totalRevenue')
+            if fcf is not None and rev is not None and not pd.isna(fcf) and not pd.isna(rev) and float(rev) != 0:
+                fcf_margin = float(fcf) / float(rev) * 100
+                if fcf_margin > 15:
+                    score += 20; components['FCF Margin'] = 20
+                elif fcf_margin > 10:
+                    score += 15; components['FCF Margin'] = 15
+                elif fcf_margin > 5:
+                    score += 10; components['FCF Margin'] = 10
+                else:
+                    score += 5; components['FCF Margin'] = 5
             else:
-                components['FCF Margin'] = 5
-                score += 5
-        except:
+                components['FCF Margin'] = 0
+        except (TypeError, ValueError, ZeroDivisionError, AttributeError) as e:
+            logger.warning("FCF margin scoring failed: %s", e)
             components['FCF Margin'] = 0
-        
+
         # Valuation Score (20 points)
         try:
-            pe_ratio = info.get('trailingPE', 999)
-            if 10 < pe_ratio < 25:
-                score += 20
-                components['Valuation'] = 20
-            elif 5 < pe_ratio < 35:
-                score += 15
-                components['Valuation'] = 15
-            elif pe_ratio < 50:
-                score += 10
-                components['Valuation'] = 10
+            pe = info.get('trailingPE')
+            if pe is not None and not pd.isna(pe):
+                pe_ratio = float(pe)
+                if 10 < pe_ratio < 25:
+                    score += 20; components['Valuation'] = 20
+                elif 5 < pe_ratio < 35:
+                    score += 15; components['Valuation'] = 15
+                elif pe_ratio < 50:
+                    score += 10; components['Valuation'] = 10
+                else:
+                    score += 5; components['Valuation'] = 5
             else:
-                components['Valuation'] = 5
-                score += 5
-        except:
+                components['Valuation'] = 0
+        except (TypeError, ValueError, AttributeError) as e:
+            logger.warning("Valuation scoring failed: %s", e)
             components['Valuation'] = 0
-        
+
         # Growth Score (15 points)
         try:
-            revenue_growth = info.get('revenueGrowth', 0) * 100
-            if revenue_growth > 20:
-                score += 15
-                components['Growth'] = 15
-            elif revenue_growth > 10:
-                score += 10
-                components['Growth'] = 10
-            elif revenue_growth > 0:
-                score += 5
-                components['Growth'] = 5
+            rg = info.get('revenueGrowth')
+            if rg is not None and not pd.isna(rg):
+                revenue_growth = float(rg) * 100
+                if revenue_growth > 20:
+                    score += 15; components['Growth'] = 15
+                elif revenue_growth > 10:
+                    score += 10; components['Growth'] = 10
+                elif revenue_growth > 0:
+                    score += 5; components['Growth'] = 5
+                else:
+                    components['Growth'] = 0
             else:
                 components['Growth'] = 0
-        except:
+        except (TypeError, ValueError, AttributeError) as e:
+            logger.warning("Growth scoring failed: %s", e)
             components['Growth'] = 0
         
+        # Debt quality modifier
+        try:
+            de = info.get('debtToEquity')
+            if de is not None and not pd.isna(de):
+                d = float(de)
+                if d > 300:
+                    score -= 10; components['Debt Penalty'] = -10
+                elif d > 150:
+                    score -= 5; components['Debt Penalty'] = -5
+                elif d < 50:
+                    score += 5; components['Debt Bonus'] = 5
+        except Exception:
+            pass
+
         return {
-            'total_score': min(score, max_score),
+            'total_score': min(max(score, 0), max_score),
             'components': components,
             'max_score': max_score
         }
     
     def get_key_metrics(self, data):
         """Extract key financial metrics"""
-        if not data:
+        if not data or "error" in data:
             return None
         
         info = data['info']
@@ -216,7 +246,7 @@ class StockAnalyzer:
             'Forward P/E': info.get('forwardPE', 0),
             'PEG Ratio': info.get('pegRatio', 0),
             'Price to Book': info.get('priceToBook', 0),
-            'Dividend Yield': info.get('dividendYield', 0) * 100 if info.get('dividendYield') else 0,
+            'Dividend Yield': info.get('trailingAnnualDividendYield', 0) * 100 if info.get('trailingAnnualDividendYield') else 0,
             'Volume': hist['Volume'].iloc[-1] if len(hist) > 0 else info.get('volume', 0),
             'Average Volume': info.get('averageVolume', 0),
             'Gross Margin': info.get('grossMargins', 0) * 100,
@@ -232,7 +262,11 @@ class StockAnalyzer:
             'Beta': info.get('beta', 0),
             'Target Price': info.get('targetMeanPrice', 0),
             'Analyst Rating': info.get('recommendationKey', 'N/A'),
-            'Number of Analysts': info.get('numberOfAnalystOpinions', 0)
+            'Number of Analysts': info.get('numberOfAnalystOpinions', 0),
+            # Yahoo: lower = more bullish (~1 strong buy .. ~5 strong sell); ~3 neutral
+            'recommendationMean': info.get('recommendationMean'),
+            '52 Week High': info.get('fiftyTwoWeekHigh'),
+            '52 Week Low': info.get('fiftyTwoWeekLow'),
         }
         
         return metrics
@@ -331,12 +365,22 @@ class StockAnalyzer:
             
             # Chikou Span (Lagging Span): Close price shifted 26 periods backward
             hist['Ichimoku_Chikou'] = hist['Close'].shift(-period2)
-        
+
+        # OBV (On-Balance Volume) — cumulative volume direction indicator
+        hist['OBV'] = (np.sign(hist['Close'].diff()).fillna(0) * hist['Volume']).cumsum()
+
+        # VWAP — 20-day rolling (meaningful for swing traders on daily data)
+        typical_price = (hist['High'] + hist['Low'] + hist['Close']) / 3
+        hist['VWAP'] = (
+            (typical_price * hist['Volume']).rolling(20).sum() /
+            hist['Volume'].rolling(20).sum()
+        )
+
         return hist
     
     def calculate_forecast(self, data, metrics, score, days=30):
         """Calculate price forecast and probability based on multiple factors"""
-        if not data or not metrics or not score:
+        if not data or "error" in data or not metrics or not score:
             return None
         
         hist = data.get('history')

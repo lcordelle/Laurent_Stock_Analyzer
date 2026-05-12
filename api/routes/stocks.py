@@ -753,6 +753,9 @@ def _analyze_ticker(ticker: str, period: str) -> FullStockAnalysis:
         earnings_dates=earnings_dates,
         relative_strength=relative_strength_list,
         analyst_target_age_days=_analyst_target_age(info),
+        data_source=data.get('data_source'),
+        cached_at=data.get('cached_at'),
+        is_stale=bool(data.get('is_stale', False)),
     )
 
 

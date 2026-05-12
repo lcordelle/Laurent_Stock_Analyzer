@@ -478,6 +478,18 @@ export default function Analysis() {
                     )}
                   </>
                 )}
+                {data.is_stale && data.cached_at && (
+                  <div
+                    title={`Live data unavailable (Alpha Vantage limit reached). Showing cached data from ${new Date(data.cached_at + 'Z').toLocaleString()}.`}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold cursor-help"
+                    style={{ backgroundColor: 'rgba(234,179,8,0.12)', color: '#fbbf24', border: '1px solid rgba(234,179,8,0.25)' }}
+                  >
+                    <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                    </svg>
+                    Cached · {new Date(data.cached_at + 'Z').toLocaleDateString()}
+                  </div>
+                )}
                 {ticker && (
                   <button
                     onClick={() => {

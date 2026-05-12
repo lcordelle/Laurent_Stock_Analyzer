@@ -98,6 +98,9 @@ export interface FullStockAnalysis {
   relative_strength?: (number | null)[]
   analyst_target_age_days?: number
   error?: string
+  data_source?: string
+  cached_at?: string
+  is_stale?: boolean
 }
 
 export interface BatchAnalysisResponse {

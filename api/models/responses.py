@@ -174,6 +174,9 @@ class FullStockAnalysis(BaseModel):
     relative_strength: list[Optional[float]] = []
     analyst_target_age_days: Optional[int] = None
     error: Optional[str] = None
+    data_source: Optional[str] = None
+    cached_at: Optional[str] = None
+    is_stale: bool = False
 
 
 class BatchAnalysisResponse(BaseModel):

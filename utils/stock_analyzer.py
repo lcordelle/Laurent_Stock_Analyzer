@@ -7,6 +7,7 @@ Simplified for local use with Yahoo Finance
 import logging
 import yfinance as yf
 from utils.ticker_resolver import resolve_to_ticker
+from utils.alpha_vantage_client import AlphaVantageClient
 import pandas as pd
 import numpy as np
 import warnings
@@ -22,84 +23,118 @@ class StockAnalyzer:
         self.cache = {}
     
     def get_stock_data(self, ticker, period="1y"):
-        """Fetch comprehensive stock data with caching.
-        ticker: symbol (AAPL) or company name (Apple, Microsoft) - resolved automatically."""
+        """Fetch stock data with disk-backed stale cache fallback.
+        Primary: yfinance. On failure: return cached data with is_stale=True.
+        AV GLOBAL_QUOTE used to enrich current price when key is available."""
+        import os, json
+        from pathlib import Path
+        from datetime import datetime as _dt
+
         query = str(ticker).strip()
         resolved = resolve_to_ticker(query)
         ticker = resolved if resolved else query.upper()
-        
-        # Check cache first
+
         cache_key = f"{ticker}_{period}"
         if cache_key in self.cache:
-            cached_data = self.cache[cache_key]
-            # Check if cache is still valid (5 minutes)
-            if time.time() - cached_data.get('timestamp', 0) < 300:
-                return cached_data.get('data')
-        
-        try:
-            # Use yfinance - works perfectly on local network
-            stock = yf.Ticker(ticker)
-            
-            # Get historical data
-            hist = stock.history(period=period)
-            
-            # Check if we got valid data
-            if hist is None or len(hist) == 0:
-                logger.warning("No price history found for ticker: %s", ticker)
-                return {"error": "no_data", "ticker": ticker}
+            entry = self.cache[cache_key]
+            if time.time() - entry.get('timestamp', 0) < 300:
+                return entry['data']
 
-            # Fetch additional data
-            try:
-                info = stock.info
-            except Exception as e:
-                logger.warning("Failed to fetch info for %s: %s", ticker, e)
-                info = {}
+        disk_cache_dir = Path.home() / '.cache' / 'stock_analyzer' / 'yf_cache'
+        disk_cache_dir.mkdir(parents=True, exist_ok=True)
+        disk_cache_path = disk_cache_dir / f"{ticker}_{period}.json"
 
-            try:
-                financials = stock.financials
-                if financials is None:
-                    financials = pd.DataFrame()
-            except Exception as e:
-                logger.warning("Failed to fetch financials for %s: %s", ticker, e)
-                financials = pd.DataFrame()
+        def _build_result(hist, info, financials, balance_sheet, cash_flow, stock_obj,
+                          is_stale=False, cached_at=None):
+            # Optionally enrich current price via AV GLOBAL_QUOTE (cheap: 1 req)
+            av_key = os.environ.get('ALPHA_VANTAGE_API_KEY', '')
+            if av_key and not is_stale:
+                try:
+                    av = AlphaVantageClient(api_key=av_key)
+                    quote, _, _ = av.get_quote(ticker)
+                    if quote.get('currentPrice'):
+                        info = dict(info)
+                        info['currentPrice'] = quote['currentPrice']
+                        info['regularMarketPrice'] = quote['currentPrice']
+                except Exception:
+                    pass
 
-            try:
-                balance_sheet = stock.balance_sheet
-                if balance_sheet is None:
-                    balance_sheet = pd.DataFrame()
-            except Exception as e:
-                logger.warning("Failed to fetch balance sheet for %s: %s", ticker, e)
-                balance_sheet = pd.DataFrame()
-
-            try:
-                cash_flow = stock.cashflow
-                if cash_flow is None:
-                    cash_flow = pd.DataFrame()
-            except Exception as e:
-                logger.warning("Failed to fetch cash flow for %s: %s", ticker, e)
-                cash_flow = pd.DataFrame()
-            
-            # Return data
-            result = {
+            return {
                 'ticker': ticker,
                 'history': hist,
                 'info': info,
                 'financials': financials,
                 'balance_sheet': balance_sheet,
                 'cash_flow': cash_flow,
-                'stock_object': stock
+                'stock_object': stock_obj,
+                'data_source': 'yfinance_cache' if is_stale else 'yfinance',
+                'cached_at': cached_at,
+                'is_stale': is_stale,
             }
-            
-            # Cache the result
-            self.cache[cache_key] = {
-                'data': result,
-                'timestamp': time.time()
-            }
-            
+
+        try:
+            stock = yf.Ticker(ticker)
+            hist = stock.history(period=period)
+            if hist is None or len(hist) == 0:
+                raise Exception("no_data")
+
+            def _safe(fn):
+                try:
+                    v = fn()
+                    return v if v is not None else pd.DataFrame()
+                except Exception:
+                    return pd.DataFrame()
+
+            info = _safe(lambda: stock.info) or {}
+            financials = _safe(lambda: stock.financials)
+            balance_sheet = _safe(lambda: stock.balance_sheet)
+            cash_flow = _safe(lambda: stock.cashflow)
+
+            # Persist to disk cache (serialisable subset)
+            try:
+                entry_ts = _dt.utcnow().isoformat()
+                disk_cache_path.write_text(json.dumps({
+                    '_ts': time.time(), '_cached_at': entry_ts,
+                    'info': {k: v for k, v in info.items() if isinstance(v, (str, int, float, bool, type(None)))},
+                }))
+            except Exception:
+                pass
+
+            result = _build_result(hist, info, financials, balance_sheet, cash_flow, stock)
+            self.cache[cache_key] = {'data': result, 'timestamp': time.time()}
             return result
-        except Exception as e:
-            logger.error("Failed to fetch data for ticker %s: %s", ticker, e)
-            return {"error": str(e), "ticker": ticker}
+
+        except Exception as live_err:
+            if 'no_data' in str(live_err):
+                return {"error": "no_data", "ticker": ticker}
+
+            logger.warning("yfinance failed for %s (%s), trying disk cache", ticker, live_err)
+
+            if disk_cache_path.exists():
+                try:
+                    cached = json.loads(disk_cache_path.read_text())
+                    cached_info = cached.get('info', {})
+                    cached_at = cached.get('_cached_at')
+                    # Reconstruct minimal history from AV compact if key available
+                    hist = None
+                    av_key = os.environ.get('ALPHA_VANTAGE_API_KEY', '')
+                    if av_key:
+                        try:
+                            av = AlphaVantageClient(api_key=av_key)
+                            hist, _, _ = av.get_historical_data(ticker, 'compact' if period in ('1d','5d','1mo') else '3mo')
+                        except Exception:
+                            pass
+                    if hist is None or len(hist) == 0:
+                        return {"error": str(live_err), "ticker": ticker}
+                    result = _build_result(hist, cached_info, pd.DataFrame(), pd.DataFrame(), pd.DataFrame(),
+                                           None, is_stale=True, cached_at=cached_at)
+                    self.cache[cache_key] = {'data': result, 'timestamp': time.time()}
+                    return result
+                except Exception:
+                    pass
+
+            logger.error("All data sources failed for %s: %s", ticker, live_err)
+            return {"error": str(live_err), "ticker": ticker}
 
     def calculate_score(self, data):
         """Calculate comprehensive stock score (0-100)"""

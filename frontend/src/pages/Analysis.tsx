@@ -464,7 +464,15 @@ export default function Analysis() {
               </span>
               <div>
                 <div className="text-sm font-bold leading-tight" style={{ color: '#e2e8f0' }}>{data.company_name ?? data.ticker}</div>
-                {data.sector && <div className="text-xs" style={{ color: '#475569' }}>{data.sector}{data.industry ? ` · ${data.industry}` : ''}</div>}
+                <div className="flex items-center gap-2">
+                  {data.sector && <span className="text-xs" style={{ color: '#475569' }}>{data.sector}{data.industry ? ` · ${data.industry}` : ''}</span>}
+                  {data.data_source && (
+                    <span className="text-xs px-1.5 py-0.5 rounded font-medium"
+                      style={{ backgroundColor: 'rgba(99,102,241,0.12)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.2)' }}>
+                      {data.data_source}
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="flex items-center gap-3 ml-auto">
                 {currentPrice && (

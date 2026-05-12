@@ -23,9 +23,9 @@ class StockAnalyzer:
         self.cache = {}
     
     def get_stock_data(self, ticker, period="1y"):
-        """Fetch stock data with disk-backed stale cache fallback.
-        Primary: yfinance. On failure: return cached data with is_stale=True.
-        AV GLOBAL_QUOTE used to enrich current price when key is available."""
+        """Fetch stock data.
+        History: yfinance (full period). Fundamentals + price: Alpha Vantage (OVERVIEW + GLOBAL_QUOTE).
+        On yfinance failure: stale disk cache. AV results cached to disk (respects 25 req/day limit)."""
         import os, json
         from pathlib import Path
         from datetime import datetime as _dt
@@ -43,34 +43,42 @@ class StockAnalyzer:
         disk_cache_dir = Path.home() / '.cache' / 'stock_analyzer' / 'yf_cache'
         disk_cache_dir.mkdir(parents=True, exist_ok=True)
         disk_cache_path = disk_cache_dir / f"{ticker}_{period}.json"
+        av_key = os.environ.get('ALPHA_VANTAGE_API_KEY', '')
 
-        def _build_result(hist, info, financials, balance_sheet, cash_flow, stock_obj,
-                          is_stale=False, cached_at=None):
-            # Optionally enrich current price via AV GLOBAL_QUOTE (cheap: 1 req)
-            av_key = os.environ.get('ALPHA_VANTAGE_API_KEY', '')
-            if av_key and not is_stale:
-                try:
-                    av = AlphaVantageClient(api_key=av_key)
-                    quote, _, _ = av.get_quote(ticker)
-                    if quote.get('currentPrice'):
-                        info = dict(info)
-                        info['currentPrice'] = quote['currentPrice']
-                        info['regularMarketPrice'] = quote['currentPrice']
-                except Exception:
-                    pass
-
-            return {
-                'ticker': ticker,
-                'history': hist,
-                'info': info,
-                'financials': financials,
-                'balance_sheet': balance_sheet,
-                'cash_flow': cash_flow,
-                'stock_object': stock_obj,
-                'data_source': 'yfinance_cache' if is_stale else 'yfinance',
-                'cached_at': cached_at,
-                'is_stale': is_stale,
-            }
+        def _enrich_with_av(info: dict) -> tuple[dict, str]:
+            """Merge AV OVERVIEW + GLOBAL_QUOTE into info dict.
+            Returns (merged_info, data_source_label)."""
+            if not av_key:
+                return info, 'yfinance'
+            av = AlphaVantageClient(api_key=av_key)
+            av_info = dict(info)
+            sources = ['yfinance']
+            try:
+                overview, _, _ = av.get_company_overview(ticker)
+                if overview.get('name'):
+                    # AV OVERVIEW is the authoritative fundamentals source
+                    for k in ('sector', 'industry', 'marketCap', 'trailingPE', 'forwardPE',
+                              'pegRatio', 'priceToBook', 'beta', 'dividendYield',
+                              'fiftyTwoWeekHigh', 'fiftyTwoWeekLow', '52WeekHigh', '52WeekLow',
+                              'operatingMargins', 'profitMargins', 'returnOnEquity', 'returnOnAssets',
+                              'revenueGrowth', 'earningsGrowth', 'debtToEquity',
+                              'currentRatio', 'quickRatio', 'targetMeanPrice',
+                              'longName', 'longBusinessSummary', 'description'):
+                        if overview.get(k):
+                            av_info[k] = overview[k]
+                    sources.append('Alpha Vantage')
+            except Exception:
+                pass
+            try:
+                quote, _, _ = av.get_quote(ticker)
+                if quote.get('currentPrice'):
+                    av_info['currentPrice'] = quote['currentPrice']
+                    av_info['regularMarketPrice'] = quote['currentPrice']
+                    if 'Alpha Vantage' not in sources:
+                        sources.append('Alpha Vantage')
+            except Exception:
+                pass
+            return av_info, ' + '.join(sources)
 
         try:
             stock = yf.Ticker(ticker)
@@ -90,17 +98,23 @@ class StockAnalyzer:
             balance_sheet = _safe(lambda: stock.balance_sheet)
             cash_flow = _safe(lambda: stock.cashflow)
 
-            # Persist to disk cache (serialisable subset)
+            info, data_source = _enrich_with_av(info)
+
+            # Persist serialisable subset for stale fallback
             try:
-                entry_ts = _dt.utcnow().isoformat()
                 disk_cache_path.write_text(json.dumps({
-                    '_ts': time.time(), '_cached_at': entry_ts,
+                    '_ts': time.time(), '_cached_at': _dt.utcnow().isoformat(),
                     'info': {k: v for k, v in info.items() if isinstance(v, (str, int, float, bool, type(None)))},
                 }))
             except Exception:
                 pass
 
-            result = _build_result(hist, info, financials, balance_sheet, cash_flow, stock)
+            result = {
+                'ticker': ticker, 'history': hist, 'info': info,
+                'financials': financials, 'balance_sheet': balance_sheet,
+                'cash_flow': cash_flow, 'stock_object': stock,
+                'data_source': data_source, 'cached_at': None, 'is_stale': False,
+            }
             self.cache[cache_key] = {'data': result, 'timestamp': time.time()}
             return result
 
@@ -108,26 +122,29 @@ class StockAnalyzer:
             if 'no_data' in str(live_err):
                 return {"error": "no_data", "ticker": ticker}
 
-            logger.warning("yfinance failed for %s (%s), trying disk cache", ticker, live_err)
+            logger.warning("yfinance failed for %s (%s), trying stale cache", ticker, live_err)
 
             if disk_cache_path.exists():
                 try:
                     cached = json.loads(disk_cache_path.read_text())
                     cached_info = cached.get('info', {})
                     cached_at = cached.get('_cached_at')
-                    # Reconstruct minimal history from AV compact if key available
                     hist = None
-                    av_key = os.environ.get('ALPHA_VANTAGE_API_KEY', '')
                     if av_key:
                         try:
                             av = AlphaVantageClient(api_key=av_key)
-                            hist, _, _ = av.get_historical_data(ticker, 'compact' if period in ('1d','5d','1mo') else '3mo')
+                            hist, _, _ = av.get_historical_data(ticker, 'compact')
                         except Exception:
                             pass
                     if hist is None or len(hist) == 0:
                         return {"error": str(live_err), "ticker": ticker}
-                    result = _build_result(hist, cached_info, pd.DataFrame(), pd.DataFrame(), pd.DataFrame(),
-                                           None, is_stale=True, cached_at=cached_at)
+                    result = {
+                        'ticker': ticker, 'history': hist, 'info': cached_info,
+                        'financials': pd.DataFrame(), 'balance_sheet': pd.DataFrame(),
+                        'cash_flow': pd.DataFrame(), 'stock_object': None,
+                        'data_source': 'Alpha Vantage (stale cache)',
+                        'cached_at': cached_at, 'is_stale': True,
+                    }
                     self.cache[cache_key] = {'data': result, 'timestamp': time.time()}
                     return result
                 except Exception:

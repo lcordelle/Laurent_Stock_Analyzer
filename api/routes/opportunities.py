@@ -334,13 +334,19 @@ def _quick_scan(ticker: str) -> Optional[dict]:
                 hist_ind = _analyzer.calculate_technical_indicators(hist.copy())
             except Exception:
                 hist_ind = hist
-        sig = _compute_trading_signals(hist_ind if hist_ind is not None else hist, current_price, recent_news_count=recent_news_count)
-
-        # Analyst consensus target
+        # Analyst consensus target (computed before signals so it feeds the fundamental modifier)
         analyst_target = info.get("targetMeanPrice")
         analyst_upside = None
         if analyst_target and current_price and current_price > 0:
             analyst_upside = round((analyst_target - current_price) / current_price * 100, 1)
+
+        sig = _compute_trading_signals(
+            hist_ind if hist_ind is not None else hist,
+            current_price,
+            recent_news_count=recent_news_count,
+            fundamental_score=vf_score,
+            analyst_upside_pct=analyst_upside,
+        )
 
         # 52-week momentum (price position in range)
         low52 = info.get("fiftyTwoWeekLow")

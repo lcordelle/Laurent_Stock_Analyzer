@@ -337,6 +337,8 @@ def _compute_trading_signals(
     earnings_dates: list | None = None,
     short_interest_pct: Optional[float] = None,
     recent_news_count: int = 0,
+    fundamental_score: int = 0,
+    analyst_upside_pct: Optional[float] = None,
 ) -> TradingSignals:
     if hist is None or len(hist) < 20 or current_price is None:
         return TradingSignals()
@@ -468,6 +470,20 @@ def _compute_trading_signals(
         score += 0.5        # Catalyst confirmed
     elif recent_news_count == 0 and abs(score) > 1:
         score -= 0.25       # No catalyst reduces conviction
+
+    # Fundamental quality modifier — prevents strong sell on high-quality companies
+    # and boosts conviction when fundamentals + technicals align
+    if fundamental_score >= 90:
+        score = max(score, -1.0)         # Elite fundamentals: floor at SELL
+        if analyst_upside_pct is not None and analyst_upside_pct > 20:
+            score += 0.75                # Deep value + elite fundamentals
+    elif fundamental_score >= 75:
+        score = max(score, -1.5)         # Strong fundamentals: prevent STRONG SELL
+        if analyst_upside_pct is not None and analyst_upside_pct > 15:
+            score += 0.5
+    elif fundamental_score >= 60:
+        if analyst_upside_pct is not None and analyst_upside_pct > 25:
+            score += 0.5                 # Significant analyst upside adds conviction
 
     if score >= 2.5:
         signal_str = "STRONG BUY"
@@ -745,6 +761,11 @@ def _analyze_ticker(ticker: str, period: str) -> FullStockAnalysis:
             earnings_dates=earnings_dates,
             short_interest_pct=short_interest.short_pct_float,
             recent_news_count=len(raw_news),
+            fundamental_score=int(raw_score.get("total_score", 0)) if raw_score else 0,
+            analyst_upside_pct=_safe_float(
+                ((raw_analyst.get("target_price") or 0) - (raw_metrics.get("Current Price") or 0))
+                / (raw_metrics.get("Current Price") or 1) * 100
+            ) if raw_analyst and raw_metrics else None,
         ) if raw_metrics and raw_metrics.get("Current Price") else TradingSignals(),
         risk_profile=risk_profile,
         news=_build_news(raw_news),

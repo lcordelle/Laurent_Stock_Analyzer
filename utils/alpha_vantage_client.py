@@ -153,7 +153,7 @@ class AlphaVantageClient:
             return {}, cached_at, is_stale
 
         def _f(k, default=0): return float(data.get(k, default) or default)
-        def _pct(k): return _f(k) / 100 if data.get(k) else 0
+        def _pct(k): return _f(k) if data.get(k) else 0
 
         overview = {
             'symbol': data.get('Symbol', ''),

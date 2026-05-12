@@ -270,7 +270,11 @@ function MetricsStrip({ data }: { data: FullStockAnalysis }) {
 }
 
 // ── Deep research tabs ────────────────────────────────────────────────────────
-type Tab = 'fundamentals' | 'earnings' | 'news' | 'ai'
+import EarningsPreview from '../components/stocks/EarningsPreview'
+import CatalystCalendar from '../components/stocks/CatalystCalendar'
+import ValuationTools from '../components/stocks/ValuationTools'
+
+type Tab = 'fundamentals' | 'earnings' | 'news' | 'ai' | 'valuation' | 'catalysts'
 
 function DeepTabs({ data, period, onPeriodChange }: {
   data: FullStockAnalysis; period: string; onPeriodChange: (p: string) => void
@@ -281,6 +285,8 @@ function DeepTabs({ data, period, onPeriodChange }: {
   const tabs: Array<{ id: Tab; label: string }> = [
     { id: 'fundamentals', label: 'Fundamentals' },
     { id: 'earnings',     label: 'Earnings' },
+    { id: 'valuation',    label: 'Valuation' },
+    { id: 'catalysts',    label: 'Catalysts' },
     { id: 'news',         label: 'News & Analyst' },
     { id: 'ai',           label: 'AI Research' },
   ]
@@ -314,7 +320,14 @@ function DeepTabs({ data, period, onPeriodChange }: {
             {data.risk_profile && <RiskProfile riskProfile={data.risk_profile} ticker={data.ticker} />}
           </>
         )}
-        {tab === 'earnings' && <EarningsPanel ticker={data.ticker} />}
+        {tab === 'earnings' && (
+          <>
+            <EarningsPanel ticker={data.ticker} />
+            <EarningsPreview data={data} />
+          </>
+        )}
+        {tab === 'valuation' && <ValuationTools data={data} />}
+        {tab === 'catalysts' && <CatalystCalendar data={data} />}
         {tab === 'news' && (
           <>
             <NewsPanel articles={data.news} />

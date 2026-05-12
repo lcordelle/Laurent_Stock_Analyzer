@@ -248,3 +248,238 @@ async def analyst_report(body: AiAnalystRequest, _: str = Depends(verify_token))
         None, _run_analyst_report,
         body.ticker, body.company_name, body.sector, body.metrics, body.score,
     )
+
+
+# ── Plugin-enhanced endpoints ─────────────────────────────────────────────────
+
+class EarningsPreviewRequest(BaseModel):
+    ticker: str
+    company_name: str = ""
+    sector: str = ""
+    metrics: dict = {}
+    earnings_dates: list = []
+
+class CatalystRequest(BaseModel):
+    ticker: str
+    company_name: str = ""
+    sector: str = ""
+    metrics: dict = {}
+
+class DcfRequest(BaseModel):
+    ticker: str
+    company_name: str = ""
+    sector: str = ""
+    metrics: dict = {}
+
+class CompsRequest(BaseModel):
+    ticker: str
+    company_name: str = ""
+    sector: str = ""
+    industry: str = ""
+    metrics: dict = {}
+
+class PluginAnalysisResponse(BaseModel):
+    ticker: str
+    content: str = ""
+    error: str = ""
+
+
+def _build_earnings_preview_prompt(ticker: str, company_name: str, sector: str, metrics: dict, earnings_dates: list) -> str:
+    cur = _fmt(metrics.get("current_price"), "${:.2f}")
+    pe = _fmt(metrics.get("pe_ratio"), "{:.1f}")
+    fwd_pe = _fmt(metrics.get("forward_pe"), "{:.1f}")
+    rev_growth = _fmt(metrics.get("revenue_growth"), "{:.1%}")
+    gross_margin = _fmt(metrics.get("gross_margin"), "{:.1%}")
+    next_earnings = earnings_dates[0].get("date", "upcoming") if earnings_dates else "upcoming"
+
+    return f"""You are a senior equity research analyst (JPMorgan / Goldman Sachs standard).
+Produce a concise pre-earnings preview for {ticker} ({company_name}, {sector}).
+
+CURRENT DATA:
+- Price: {cur} | P/E: {pe} | Fwd P/E: {fwd_pe}
+- Revenue Growth: {rev_growth} | Gross Margin: {gross_margin}
+- Next Earnings: {next_earnings}
+
+Using the equity-research earnings-preview framework, produce:
+
+## Earnings Preview: {ticker}
+
+### What to Watch
+3-4 specific metrics/themes that will drive the stock reaction (be concrete: segment revenues, margins, guidance ranges).
+
+### Bull Case (Stock +5-10%)
+Exactly 3 bullet points — what beats/raises would look like with specific numbers.
+
+### Bear Case (Stock -5-10%)
+Exactly 3 bullet points — what misses/cuts would look like with specific numbers.
+
+### Key Number
+The single most important metric to watch and why (1-2 sentences).
+
+### Positioning
+1-2 sentences on how to think about the risk/reward into the print.
+
+Be specific, cite numbers, no generic disclaimers."""
+
+
+def _build_catalyst_prompt(ticker: str, company_name: str, sector: str, metrics: dict) -> str:
+    cur = _fmt(metrics.get("current_price"), "${:.2f}")
+    return f"""You are a senior equity research analyst building a catalyst calendar.
+Company: {ticker} ({company_name}, {sector}) — Current Price: {cur}
+
+Using the equity-research catalyst-calendar framework, identify and structure ALL upcoming catalysts:
+
+## Catalyst Calendar: {ticker}
+
+### Near-Term (Next 30 Days)
+List specific upcoming events with estimated dates and expected stock impact (↑/↓/→).
+
+### Medium-Term (1-3 Months)
+Earnings date (with consensus EPS/revenue estimates if known), product launches, regulatory decisions, conferences.
+
+### Longer-Term (3-12 Months)
+Strategic catalysts: new product cycles, market expansions, regulatory approvals, management changes, M&A.
+
+### Macro Factors
+2-3 macro/sector tailwinds or headwinds specific to this company.
+
+### Catalyst Summary Table
+| Event | Est. Date | Direction | Magnitude |
+|-------|-----------|-----------|-----------|
+(Fill with 4-6 rows)
+
+Be specific and actionable. No generic disclaimers."""
+
+
+def _build_dcf_prompt(ticker: str, company_name: str, sector: str, metrics: dict) -> str:
+    cur = _fmt(metrics.get("current_price"), "${:.2f}")
+    rev_growth = _fmt(metrics.get("revenue_growth"), "{:.1%}")
+    op_margin = _fmt(metrics.get("operating_margins"), "{:.1%}")
+    pe = _fmt(metrics.get("pe_ratio"), "{:.1f}")
+    beta = _fmt(metrics.get("beta"), "{:.2f}")
+    mktcap = metrics.get("market_cap")
+    mktcap_str = f"${mktcap/1e9:.1f}B" if mktcap and mktcap >= 1e9 else f"${mktcap/1e6:.0f}M" if mktcap else "N/A"
+
+    return f"""You are a senior investment banker building an institutional DCF valuation.
+Company: {ticker} ({company_name}, {sector})
+Current Price: {cur} | Market Cap: {mktcap_str} | Revenue Growth: {rev_growth} | Op Margin: {op_margin} | Beta: {beta} | P/E: {pe}
+
+Using the financial-analysis dcf-model framework, produce a text-based DCF analysis:
+
+## DCF Valuation: {ticker}
+
+### Key Assumptions
+| Input | Base Case | Bear Case | Bull Case |
+|-------|-----------|-----------|-----------|
+| Revenue Growth (Yr 1-3) | | | |
+| Revenue Growth (Yr 4-5) | | | |
+| EBITDA Margin | | | |
+| WACC | | | |
+| Terminal Growth Rate | | | |
+
+### Intrinsic Value Estimate
+Base case fair value: $X.XX per share (X% upside/downside to current ${cur})
+
+### Sensitivity Table (Fair Value per Share)
+Show a 3x3 table varying WACC (rows) vs Terminal Growth Rate (columns).
+
+### Valuation Verdict
+2-3 sentences: Is the stock cheap, fair, or expensive on DCF? What assumptions drive the most value?
+
+### Key Risks to Model
+3 bullet points — what could make the DCF wrong in either direction.
+
+Be quantitative and specific. State your assumptions clearly."""
+
+
+def _build_comps_prompt(ticker: str, company_name: str, sector: str, industry: str, metrics: dict) -> str:
+    cur = _fmt(metrics.get("current_price"), "${:.2f}")
+    pe = _fmt(metrics.get("pe_ratio"), "{:.1f}")
+    fwd_pe = _fmt(metrics.get("forward_pe"), "{:.1f}")
+    pb = _fmt(metrics.get("price_to_book"), "{:.1f}")
+    rev_growth = _fmt(metrics.get("revenue_growth"), "{:.1%}")
+    gross_margin = _fmt(metrics.get("gross_margin"), "{:.1%}")
+    mktcap = metrics.get("market_cap")
+    mktcap_str = f"${mktcap/1e9:.1f}B" if mktcap and mktcap >= 1e9 else f"${mktcap/1e6:.0f}M" if mktcap else "N/A"
+
+    return f"""You are a senior equity research analyst building a comparable company analysis.
+Subject: {ticker} ({company_name}) | Sector: {sector} | Industry: {industry}
+Current Price: {cur} | Market Cap: {mktcap_str} | P/E: {pe} | Fwd P/E: {fwd_pe} | P/B: {pb} | Rev Growth: {rev_growth} | Gross Margin: {gross_margin}
+
+Using the financial-analysis comps-analysis framework, produce:
+
+## Comparable Company Analysis: {ticker}
+
+### Peer Set
+Identify 5-7 closest public comparable companies with ticker symbols.
+
+### Valuation Multiples Table
+| Company | Ticker | Mkt Cap | EV/EBITDA | P/E (FWD) | P/Sales | Rev Growth | Gross Margin |
+|---------|--------|---------|-----------|-----------|---------|------------|--------------|
+(Fill with peers + {ticker} highlighted)
+
+### {ticker} vs. Peer Median
+| Metric | {ticker} | Peer Median | Premium/(Discount) |
+|--------|---------|-------------|-------------------|
+| Fwd P/E | {fwd_pe} | | |
+| EV/EBITDA | | | |
+| P/Sales | | | |
+| Revenue Growth | {rev_growth} | | |
+| Gross Margin | {gross_margin} | | |
+
+### Valuation Verdict
+2-3 sentences: Is {ticker} trading at a justified premium/discount to peers? What explains the differential?
+
+Use real, current market data for peers. Be specific with numbers."""
+
+
+@router.post("/ai/earnings-preview", response_model=PluginAnalysisResponse)
+async def earnings_preview(body: EarningsPreviewRequest, _: str = Depends(verify_token)):
+    def _run():
+        try:
+            prompt = _build_earnings_preview_prompt(body.ticker, body.company_name, body.sector, body.metrics, body.earnings_dates)
+            text, _, _ = _call_llm(prompt)
+            return PluginAnalysisResponse(ticker=body.ticker, content=text)
+        except Exception as e:
+            return PluginAnalysisResponse(ticker=body.ticker, error=str(e))
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _run)
+
+
+@router.post("/ai/catalysts", response_model=PluginAnalysisResponse)
+async def catalysts(body: CatalystRequest, _: str = Depends(verify_token)):
+    def _run():
+        try:
+            prompt = _build_catalyst_prompt(body.ticker, body.company_name, body.sector, body.metrics)
+            text, _, _ = _call_llm(prompt)
+            return PluginAnalysisResponse(ticker=body.ticker, content=text)
+        except Exception as e:
+            return PluginAnalysisResponse(ticker=body.ticker, error=str(e))
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _run)
+
+
+@router.post("/ai/dcf", response_model=PluginAnalysisResponse)
+async def dcf_valuation(body: DcfRequest, _: str = Depends(verify_token)):
+    def _run():
+        try:
+            prompt = _build_dcf_prompt(body.ticker, body.company_name, body.sector, body.metrics)
+            text, _, _ = _call_llm(prompt)
+            return PluginAnalysisResponse(ticker=body.ticker, content=text)
+        except Exception as e:
+            return PluginAnalysisResponse(ticker=body.ticker, error=str(e))
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _run)
+
+
+@router.post("/ai/comps", response_model=PluginAnalysisResponse)
+async def comps_analysis(body: CompsRequest, _: str = Depends(verify_token)):
+    def _run():
+        try:
+            prompt = _build_comps_prompt(body.ticker, body.company_name, body.sector, body.industry or "", body.metrics)
+            text, _, _ = _call_llm(prompt)
+            return PluginAnalysisResponse(ticker=body.ticker, content=text)
+        except Exception as e:
+            return PluginAnalysisResponse(ticker=body.ticker, error=str(e))
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _run)

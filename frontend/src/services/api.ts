@@ -51,6 +51,14 @@ export const aiApi = {
     api.post('/ai/research', { ticker, question, context }).then(r => r.data),
   analystReport: (ticker: string, company_name: string, sector: string, metrics: object, score: object) =>
     api.post('/ai/analyst-report', { ticker, company_name, sector, metrics, score }).then(r => r.data),
+  earningsPreview: (ticker: string, company_name: string, sector: string, metrics: object, earnings_dates: object[]) =>
+    api.post('/ai/earnings-preview', { ticker, company_name, sector, metrics, earnings_dates }).then(r => r.data),
+  catalysts: (ticker: string, company_name: string, sector: string, metrics: object) =>
+    api.post('/ai/catalysts', { ticker, company_name, sector, metrics }).then(r => r.data),
+  dcf: (ticker: string, company_name: string, sector: string, metrics: object) =>
+    api.post('/ai/dcf', { ticker, company_name, sector, metrics }).then(r => r.data),
+  comps: (ticker: string, company_name: string, sector: string, industry: string, metrics: object) =>
+    api.post('/ai/comps', { ticker, company_name, sector, industry, metrics }).then(r => r.data),
 }
 
 export const gradesApi = {

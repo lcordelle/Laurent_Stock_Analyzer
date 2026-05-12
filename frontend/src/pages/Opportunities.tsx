@@ -625,139 +625,353 @@ function IdeasTable({ ideas }: { ideas: ScannedStock[] }) {
   )
 }
 
-// ── Top 50 ranked list ────────────────────────────────────────────────────────
-function Top50View({ ideas }: { ideas: ScannedStock[] }) {
+// ── Golden Star helpers ───────────────────────────────────────────────────────
+type GoldenTier = 'ACT_NOW' | 'HIGH_WATCH'
+
+function goldTier(s: ScannedStock): GoldenTier {
+  const isBuy = (s.signal ?? '').includes('BUY')
+  if (isBuy && s.combined_score >= 68) return 'ACT_NOW'
+  return 'HIGH_WATCH'
+}
+
+function HeroCard({ stock }: { stock: ScannedStock }) {
   const navigate = useNavigate()
-  const primeStocks = [...ideas]
-    .filter(s => s.signal_quality === 'PRIME')
+  const [added, setAdded] = useState(false)
+  const sigCol = signalColor(stock.signal)
+  const upside = stock.analyst_upside
+  return (
+    <div
+      className="rounded-2xl border p-6 flex flex-col gap-5"
+      style={{
+        background: 'linear-gradient(135deg, rgba(0,230,118,0.06) 0%, rgba(0,0,0,0) 60%)',
+        borderColor: 'rgba(0,230,118,0.3)',
+        borderLeftWidth: 4,
+        borderLeftColor: '#00e676',
+      }}
+    >
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs font-black uppercase tracking-widest px-3 py-1 rounded-full"
+          style={{ backgroundColor: '#00e67618', color: '#00e676', border: '1px solid rgba(0,230,118,0.3)' }}>
+          ★ Best Setup Right Now
+        </span>
+        <span className="text-xs font-bold px-2 py-0.5 rounded-lg"
+          style={{ backgroundColor: `${sigCol}20`, color: sigCol }}>{stock.signal}</span>
+        {stock.signal_quality === 'PRIME' && (
+          <span className="text-xs font-bold px-2 py-0.5 rounded-lg"
+            style={{ backgroundColor: 'rgba(255,215,0,0.12)', color: '#ffd700' }}>PRIME</span>
+        )}
+      </div>
+
+      <div className="flex items-start gap-6 flex-wrap">
+        <div>
+          <button onClick={() => navigate(`/analysis?ticker=${stock.ticker}`)}
+            className="text-4xl font-black hover:underline" style={{ color: '#00d4ff' }}>
+            {stock.ticker}
+          </button>
+          <div className="text-sm mt-0.5" style={{ color: '#94a3b8' }}>{stock.name}</div>
+          <div className="text-xs mt-0.5" style={{ color: '#475569' }}>
+            {stock.sector}{stock.domain ? ` · ${stock.domain}` : ''}
+          </div>
+        </div>
+        <div className="flex gap-5">
+          <div className="text-center">
+            <div className="text-3xl font-black" style={{ color: scoreColor(stock.vf_score) }}>{stock.vf_score}</div>
+            <div className="text-xs" style={{ color: '#475569' }}>VF Score</div>
+          </div>
+          <div className="text-center">
+            <div className="text-3xl font-black" style={{ color: scoreColor(stock.combined_score) }}>{stock.combined_score.toFixed(0)}</div>
+            <div className="text-xs" style={{ color: '#475569' }}>Combined</div>
+          </div>
+        </div>
+        {stock.confidence != null && (
+          <div className="flex flex-col gap-1.5 justify-center">
+            <div className="text-xs font-semibold" style={{ color: '#475569' }}>Signal Confidence</div>
+            <div className="flex items-center gap-2">
+              <div className="w-32 bg-white/10 rounded-full h-2.5">
+                <div className="h-2.5 rounded-full" style={{ width: `${stock.confidence}%`, backgroundColor: sigCol }} />
+              </div>
+              <span className="text-sm font-bold tabular-nums" style={{ color: sigCol }}>{stock.confidence}%</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div
+        className="rounded-xl px-4 py-3 text-sm leading-relaxed"
+        style={{ backgroundColor: 'rgba(0,230,118,0.04)', color: '#94a3b8', borderLeft: '3px solid rgba(0,230,118,0.5)' }}
+      >
+        <span className="font-semibold text-xs uppercase tracking-wide mr-2" style={{ color: '#00e676' }}>WHY NOW </span>
+        {stock.why_now}
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Entry Price', value: fmt.price(stock.price),                color: '#e2e8f0', sub: null },
+          { label: 'Stop Loss',   value: fmt.price(stock.stop_loss) || '—',     color: '#ff1744', sub: null },
+          { label: 'Target 1',   value: fmt.price(stock.tp1) || '—',            color: '#00e676',
+            sub: stock.risk_reward != null ? `${stock.risk_reward}:1 R:R` : null },
+          { label: 'Analyst Tgt', value: stock.analyst_target ? fmt.price(stock.analyst_target) : '—',
+            color: upside != null && upside > 0 ? '#00e676' : '#ff1744',
+            sub: upside != null ? `${upside > 0 ? '+' : ''}${upside.toFixed(1)}% upside` : null },
+        ].map(({ label, value, color, sub }) => (
+          <div key={label} className="rounded-xl p-3 text-center" style={{ backgroundColor: '#0a0e1a' }}>
+            <div className="text-xs mb-1" style={{ color: '#475569' }}>{label}</div>
+            <div className="text-lg font-black" style={{ color }}>{value}</div>
+            {sub && <div className="text-xs mt-0.5 font-semibold" style={{ color }}>{sub}</div>}
+          </div>
+        ))}
+      </div>
+
+      {(stock.tp1 || stock.tp2 || stock.tp3 || stock.roe != null) && (
+        <div className="flex flex-wrap gap-4 items-center">
+          {(stock.tp1 || stock.tp2 || stock.tp3) && (
+            <div className="flex gap-2">
+              {[['TP1', stock.tp1], ['TP2', stock.tp2], ['TP3', stock.tp3]].map(([label, val]) => val && (
+                <div key={label as string} className="text-center rounded-lg px-3 py-1.5"
+                  style={{ backgroundColor: '#00e67608', border: '1px solid rgba(0,230,118,0.12)' }}>
+                  <div className="text-xs" style={{ color: '#334155' }}>{label as string}</div>
+                  <div className="text-sm font-bold" style={{ color: '#00e676' }}>{fmt.price(val as number)}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex gap-4 flex-wrap ml-auto text-xs">
+            {stock.roe != null && <span style={{ color: '#475569' }}>ROE <b style={{ color: stock.roe >= 20 ? '#00e676' : '#94a3b8' }}>{stock.roe.toFixed(1)}%</b></span>}
+            {stock.gross_margin != null && <span style={{ color: '#475569' }}>Margin <b style={{ color: '#94a3b8' }}>{stock.gross_margin.toFixed(1)}%</b></span>}
+            {stock.revenue_growth != null && <span style={{ color: '#475569' }}>Growth <b style={{ color: changeColor(stock.revenue_growth) }}>{stock.revenue_growth > 0 ? '+' : ''}{stock.revenue_growth.toFixed(1)}%</b></span>}
+            {stock.pe_ratio != null && <span style={{ color: '#475569' }}>P/E <b style={{ color: '#94a3b8' }}>{stock.pe_ratio.toFixed(1)}x</b></span>}
+          </div>
+        </div>
+      )}
+
+      <div className="flex gap-3 flex-wrap">
+        <button onClick={() => navigate(`/analysis?ticker=${stock.ticker}`)}
+          className="flex-1 text-center text-sm font-bold py-2.5 rounded-xl hover:opacity-90 transition-opacity"
+          style={{ backgroundColor: '#00e67618', color: '#00e676', border: '1px solid rgba(0,230,118,0.25)' }}>
+          Full Analysis →
+        </button>
+        <button onClick={() => navigate(`/analysis?ticker=${stock.ticker}#ai`)}
+          className="flex-1 text-center text-sm font-bold py-2.5 rounded-xl hover:opacity-90 transition-opacity"
+          style={{ backgroundColor: '#7c3aed15', color: '#a78bfa', border: '1px solid rgba(124,58,237,0.12)' }}>
+          AI Deep Research →
+        </button>
+        <button
+          onClick={() => { addToWatchlist(stock.ticker); setAdded(true); setTimeout(() => setAdded(false), 2000) }}
+          className="px-5 text-sm font-bold py-2.5 rounded-xl transition-all"
+          style={{ backgroundColor: added ? '#00e67615' : '#1a2235', color: added ? '#00e676' : '#94a3b8',
+                   border: `1px solid ${added ? 'rgba(0,230,118,0.3)' : 'rgba(255,255,255,0.06)'}` }}>
+          {added ? '✓ Added' : '+ Watch'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function ActionCard({ stock, rank }: { stock: ScannedStock; rank: number }) {
+  const navigate = useNavigate()
+  const sigCol = signalColor(stock.signal)
+  const upside = stock.analyst_upside
+  return (
+    <div
+      className="rounded-xl border p-4 flex flex-col gap-3 cursor-pointer transition-colors"
+      onClick={() => navigate(`/analysis?ticker=${stock.ticker}`)}
+      style={{ backgroundColor: '#111827', borderColor: `${sigCol}20`, borderLeftWidth: 2, borderLeftColor: sigCol }}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <div className="flex items-center gap-1.5 mb-0.5">
+            <span className="text-xs" style={{ color: '#334155' }}>#{rank}</span>
+            <span className="text-xs font-bold px-2 py-0.5 rounded"
+              style={{ backgroundColor: `${sigCol}15`, color: sigCol }}>{stock.signal}</span>
+          </div>
+          <div className="text-xl font-black font-mono" style={{ color: '#00d4ff' }}>{stock.ticker}</div>
+          <div className="text-xs truncate max-w-[160px]" style={{ color: '#475569' }}>{stock.name}</div>
+        </div>
+        <div className="text-right shrink-0">
+          <div className="text-2xl font-black" style={{ color: scoreColor(stock.combined_score) }}>{stock.combined_score.toFixed(0)}</div>
+          <div className="text-xs" style={{ color: '#334155' }}>VF {stock.vf_score}</div>
+        </div>
+      </div>
+
+      {stock.confidence != null && (
+        <div className="flex items-center gap-2">
+          <div className="flex-1 bg-white/10 rounded-full h-1.5">
+            <div className="h-1.5 rounded-full" style={{ width: `${stock.confidence}%`, backgroundColor: sigCol }} />
+          </div>
+          <span className="text-xs tabular-nums shrink-0" style={{ color: '#475569' }}>{stock.confidence}%</span>
+        </div>
+      )}
+
+      <div className="grid grid-cols-3 gap-2 text-xs">
+        {[
+          { l: 'Entry', v: fmt.price(stock.price),               c: '#e2e8f0' },
+          { l: 'SL',    v: fmt.price(stock.stop_loss) || '—',    c: '#ff1744' },
+          { l: 'TP1',   v: fmt.price(stock.tp1) || '—',          c: '#00e676' },
+        ].map(({ l, v, c }) => (
+          <div key={l} className="rounded-lg p-2 text-center" style={{ backgroundColor: '#0a0e1a' }}>
+            <div style={{ color: '#334155' }}>{l}</div>
+            <div className="font-bold mt-0.5" style={{ color: c }}>{v}</div>
+          </div>
+        ))}
+      </div>
+
+      {upside != null && (
+        <div className="flex items-center justify-between text-xs">
+          <span style={{ color: '#475569' }}>Analyst target</span>
+          <span className="font-bold" style={{ color: upside > 0 ? '#00e676' : '#ff1744' }}>
+            {stock.analyst_target ? fmt.price(stock.analyst_target) : '—'}
+            <span className="ml-1">({upside > 0 ? '+' : ''}{upside.toFixed(1)}%)</span>
+          </span>
+        </div>
+      )}
+
+      {stock.risk_reward != null && (
+        <div className="text-xs" style={{ color: '#334155' }}>R:R {stock.risk_reward}:1</div>
+      )}
+
+      <div className="text-xs leading-relaxed italic" style={{ color: '#475569' }}>{stock.why_now}</div>
+    </div>
+  )
+}
+
+function WatchCard({ stock }: { stock: ScannedStock }) {
+  const navigate = useNavigate()
+  const sigCol = signalColor(stock.signal)
+  const upside = stock.analyst_upside
+  return (
+    <div
+      className="rounded-xl border p-4 flex flex-col gap-2 cursor-pointer transition-colors"
+      onClick={() => navigate(`/analysis?ticker=${stock.ticker}`)}
+      style={{ backgroundColor: '#111827', borderColor: 'rgba(255,255,255,0.06)' }}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <div className="text-base font-black font-mono" style={{ color: '#00d4ff' }}>{stock.ticker}</div>
+          <div className="text-xs truncate max-w-[130px]" style={{ color: '#475569' }}>{stock.name}</div>
+        </div>
+        <div className="text-right">
+          <div className="text-xl font-black" style={{ color: scoreColor(stock.vf_score) }}>{stock.vf_score}</div>
+          <div className="text-xs" style={{ color: '#334155' }}>VF</div>
+        </div>
+      </div>
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs font-bold px-2 py-0.5 rounded"
+          style={{ backgroundColor: `${sigCol}15`, color: sigCol }}>{stock.signal}</span>
+        {upside != null && upside > 0 && (
+          <span className="text-xs font-semibold" style={{ color: '#00e676' }}>↑{upside.toFixed(1)}% analyst</span>
+        )}
+      </div>
+      <div className="text-xs leading-relaxed" style={{ color: '#475569' }}>
+        {(stock.why_now ?? '').slice(0, 110)}{(stock.why_now ?? '').length > 110 ? '…' : ''}
+      </div>
+      <div className="flex items-center justify-between text-xs pt-0.5">
+        <span style={{ color: '#334155' }}>{fmt.price(stock.price)}</span>
+        {stock.roe != null && <span style={{ color: '#334155' }}>ROE {stock.roe.toFixed(0)}%</span>}
+        <span className="font-semibold" style={{ color: '#00d4ff' }}>→</span>
+      </div>
+    </div>
+  )
+}
+
+// ── Golden Star Opportunities tab ─────────────────────────────────────────────
+function Top50View({ ideas, data, onRefresh }: { ideas: ScannedStock[]; data: OpportunitiesData; onRefresh: () => void }) {
+  const candidates = [...ideas]
+    .filter(s => (s.signal ?? '').includes('BUY') || (s.vf_score >= 75 && (s.analyst_upside ?? 0) >= 12))
     .sort((a, b) => b.combined_score - a.combined_score)
     .slice(0, 50)
 
-  if (primeStocks.length === 0) {
+  const actNow    = candidates.filter(s => goldTier(s) === 'ACT_NOW')
+  const highWatch = candidates.filter(s => goldTier(s) === 'HIGH_WATCH')
+  const hero      = actNow[0] ?? highWatch[0]
+  const actNowRest    = actNow.filter(s => s !== hero)
+  const highWatchRest = highWatch.filter(s => s !== hero)
+
+  const bullPct   = Math.round((data.buy_count / data.total_scanned) * 100)
+  const sentiment = bullPct > 50 ? 'Risk-On' : bullPct > 35 ? 'Neutral' : 'Risk-Off'
+  const sentColor = bullPct > 50 ? '#00e676' : bullPct > 35 ? '#ffab00' : '#ff1744'
+
+  if (candidates.length === 0) {
+    const isEmpty = data.passed_count === 0
     return (
-      <div className="flex flex-col items-center gap-3 py-16">
+      <div className="flex flex-col items-center gap-4 py-16">
         <Star className="w-8 h-8" fill="none" style={{ color: '#334155' }} />
-        <p className="text-sm font-semibold" style={{ color: '#475569' }}>No PRIME signals in current scan</p>
-        <p className="text-xs text-center max-w-md" style={{ color: '#334155' }}>
-          PRIME requires 5+ confirmed factors: strong trend (ADX), OBV alignment, stochastic extreme, S/R proximity, weekly RSI, reversal zone, and news catalyst. Refresh the scan or check back when more conditions align.
+        <p className="text-sm font-semibold" style={{ color: '#475569' }}>
+          {isEmpty ? 'Scan data not yet loaded' : 'No actionable setups in current scan'}
         </p>
+        <p className="text-xs text-center max-w-md" style={{ color: '#334155' }}>
+          {isEmpty
+            ? 'The last scan returned no results — likely due to a data source timeout. Click Refresh to re-run the scan now.'
+            : 'No BUY signals or high-conviction setups found. Market may be in a risk-off environment.'}
+        </p>
+        {isEmpty && (
+          <button
+            onClick={onRefresh}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold"
+            style={{ backgroundColor: '#00d4ff15', color: '#00d4ff', border: '1px solid rgba(0,212,255,0.25)' }}
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Refresh Scan Now
+          </button>
+        )}
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      {/* Header */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <Star className="w-4 h-4" fill="#ffd700" style={{ color: '#ffd700' }} />
-        <h2 className="text-sm font-bold uppercase tracking-wide" style={{ color: '#e2e8f0' }}>
-          Golden Star Opportunities
-        </h2>
-        <span className="text-xs px-2 py-0.5 rounded font-semibold" style={{ backgroundColor: 'rgba(255,215,0,0.12)', color: '#ffd700' }}>
-          {primeStocks.length} PRIME signal{primeStocks.length !== 1 ? 's' : ''} detected
-        </span>
-        <span className="text-xs" style={{ color: '#334155' }}>5+ independent factors confirmed · click ticker to open full analysis</span>
+    <div className="flex flex-col gap-8">
+      {/* Context strip */}
+      <div className="flex items-center gap-5 flex-wrap text-xs px-4 py-2.5 rounded-xl"
+        style={{ backgroundColor: '#0d1424', border: '1px solid rgba(255,255,255,0.04)' }}>
+        <div className="flex items-center gap-1.5">
+          <Star className="w-3 h-3" fill="#ffd700" style={{ color: '#ffd700' }} />
+          <span className="font-bold" style={{ color: '#ffd700' }}>{candidates.length} actionable</span>
+          <span style={{ color: '#334155' }}>of {data.total_scanned} scanned</span>
+        </div>
+        <span style={{ color: '#1e293b' }}>|</span>
+        <div className="flex items-center gap-1.5">
+          <span style={{ color: '#475569' }}>Market:</span>
+          <span className="font-bold" style={{ color: sentColor }}>{sentiment}</span>
+          <span style={{ color: '#334155' }}>· {bullPct}% buy signals</span>
+        </div>
+        <span style={{ color: '#1e293b' }}>|</span>
+        <span className="font-bold" style={{ color: '#00e676' }}>{actNow.length} Act Now</span>
+        <span className="font-bold" style={{ color: '#ffab00' }}>{highWatch.length} High Watch</span>
       </div>
 
-      {/* Ranked cards */}
-      <div className="flex flex-col gap-2">
-        {primeStocks.map((s, i) => {
-          const sigCol = signalColor(s.signal)
-          const rankColor = i === 0 ? '#ffd700' : i === 1 ? '#c0c0c0' : i === 2 ? '#cd7f32' : '#94a3b8'
-          const hasUpside = s.analyst_upside != null
-          const hasTarget = s.analyst_target != null
-          return (
-            <div
-              key={s.ticker}
-              className="rounded-xl border px-4 py-3 flex items-center gap-4 flex-wrap"
-              style={{
-                backgroundColor: 'rgba(255,215,0,0.04)',
-                borderColor: 'rgba(255,215,0,0.2)',
-                borderLeftWidth: 3,
-                borderLeftColor: rankColor,
-              }}
-            >
-              {/* Rank */}
-              <span className="text-sm font-black w-7 text-right shrink-0 tabular-nums" style={{ color: rankColor }}>
-                #{i + 1}
-              </span>
+      {/* Hero — single best pick */}
+      {hero && <HeroCard stock={hero} />}
 
-              {/* Golden star */}
-              <Star className="w-4 h-4 shrink-0" fill="#ffd700" style={{ color: '#ffd700' }} />
+      {/* Act Now grid */}
+      {actNowRest.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-4">
+            <Zap className="w-4 h-4" style={{ color: '#00e676' }} />
+            <h2 className="text-sm font-bold uppercase tracking-wide" style={{ color: '#e2e8f0' }}>Act Now</h2>
+            <span className="text-xs px-2 py-0.5 rounded font-semibold"
+              style={{ backgroundColor: '#00e67610', color: '#00e676' }}>{actNowRest.length} setups</span>
+            <span className="text-xs" style={{ color: '#334155' }}>confirmed BUY · combined score ≥ 68</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+            {actNowRest.map((s, i) => <ActionCard key={s.ticker} stock={s} rank={i + 2} />)}
+          </div>
+        </div>
+      )}
 
-              {/* Ticker (clickable) + name */}
-              <div className="min-w-[90px] shrink-0">
-                <button
-                  onClick={() => navigate(`/analysis?ticker=${s.ticker}`)}
-                  className="text-sm font-black hover:underline underline-offset-2 transition-colors"
-                  style={{ color: '#00d4ff' }}
-                >
-                  {s.ticker}
-                </button>
-                {s.name && <div className="text-xs truncate max-w-[150px]" style={{ color: '#475569' }}>{s.name}</div>}
-              </div>
-
-              {/* Current price */}
-              {s.price != null && (
-                <div className="flex flex-col shrink-0">
-                  <span className="text-sm font-bold tabular-nums" style={{ color: '#e2e8f0' }}>${s.price.toFixed(2)}</span>
-                  <span className="text-xs" style={{ color: '#334155' }}>price</span>
-                </div>
-              )}
-
-              {/* Analyst target + upside */}
-              {(hasTarget || hasUpside) && (
-                <div className="flex flex-col shrink-0">
-                  {hasTarget && (
-                    <span className="text-sm font-bold tabular-nums" style={{ color: '#94a3b8' }}>
-                      ${s.analyst_target!.toFixed(2)}
-                    </span>
-                  )}
-                  {hasUpside && (
-                    <span className="text-xs font-semibold tabular-nums" style={{ color: changeColor(s.analyst_upside!) }}>
-                      {s.analyst_upside! > 0 ? '+' : ''}{s.analyst_upside!.toFixed(1)}% analyst
-                    </span>
-                  )}
-                </div>
-              )}
-
-              {/* Combined score */}
-              <div className="flex flex-col items-center shrink-0">
-                <span className="text-lg font-black tabular-nums" style={{ color: scoreColor(s.combined_score) }}>{s.combined_score.toFixed(0)}</span>
-                <span className="text-xs" style={{ color: '#334155' }}>score</span>
-              </div>
-
-              {/* Signal */}
-              <span className="text-xs font-semibold px-2 py-0.5 rounded shrink-0" style={{ color: sigCol, backgroundColor: `${sigCol}15` }}>
-                {s.signal ?? '—'}
-              </span>
-
-              {/* Conviction tier */}
-              <span className="text-xs px-2 py-0.5 rounded shrink-0" style={{ color: convictionTierColor(s.conviction_tier), backgroundColor: `${convictionTierColor(s.conviction_tier)}15` }}>
-                {s.conviction_tier}
-              </span>
-
-              {/* VF Score */}
-              <div className="flex items-center gap-1 shrink-0">
-                <span className="text-xs" style={{ color: '#475569' }}>VF</span>
-                <span className="text-sm font-bold tabular-nums" style={{ color: scoreColor(s.vf_score) }}>{s.vf_score}</span>
-              </div>
-
-              {/* RSI */}
-              {s.rsi != null && (
-                <span className="text-xs tabular-nums shrink-0" style={{ color: s.rsi < 40 ? '#00e676' : s.rsi > 65 ? '#ff1744' : '#94a3b8' }}>
-                  RSI {s.rsi.toFixed(1)}
-                </span>
-              )}
-
-              {/* Why now */}
-              <span className="ml-auto text-xs italic hidden lg:block" style={{ color: '#475569', maxWidth: 260 }}>
-                {s.why_now}
-              </span>
-            </div>
-          )
-        })}
-      </div>
+      {/* High Conviction Watch */}
+      {highWatchRest.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-4">
+            <TrendingUp className="w-4 h-4" style={{ color: '#ffab00' }} />
+            <h2 className="text-sm font-bold uppercase tracking-wide" style={{ color: '#e2e8f0' }}>High Conviction Watch</h2>
+            <span className="text-xs px-2 py-0.5 rounded font-semibold"
+              style={{ backgroundColor: '#ffab0010', color: '#ffab00' }}>{highWatchRest.length} picks</span>
+            <span className="text-xs" style={{ color: '#334155' }}>strong fundamentals · building entry</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            {highWatchRest.map(s => <WatchCard key={s.ticker} stock={s} />)}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -767,7 +981,7 @@ export default function Opportunities() {
   const { data, isLoading, isError, refetch, isFetching } = useQuery<OpportunitiesData>({
     queryKey: ['opportunities'],
     queryFn: () => opportunitiesApi.get(),
-    staleTime: 10 * 60_000,
+    staleTime: 2 * 60_000,
   })
 
   const [activeMainTab, setActiveMainTab] = useState<'scan' | 'top50'>('scan')
@@ -946,7 +1160,7 @@ export default function Opportunities() {
         )}
 
         {data && activeMainTab === 'top50' && (
-          <Top50View ideas={data.all_ideas} />
+          <Top50View ideas={data.all_ideas} data={data} onRefresh={handleRefresh} />
         )}
       </div>
     </PageWrapper>

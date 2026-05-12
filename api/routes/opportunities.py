@@ -1,7 +1,9 @@
 from __future__ import annotations
 import asyncio
+import json
 import logging
 import time
+from pathlib import Path
 from typing import Optional
 import yfinance as yf
 import pandas as pd
@@ -15,7 +17,41 @@ router = APIRouter(tags=["opportunities"])
 logger = logging.getLogger(__name__)
 
 _analyzer = StockAnalyzer()
-_SEM = asyncio.Semaphore(30)
+_SEM = asyncio.Semaphore(8)  # reduced from 30 — yfinance rate-limits at high concurrency
+
+_YF_INFO_CACHE = Path.home() / '.cache' / 'stock_analyzer' / 'yf_cache'
+_YF_INFO_CACHE.mkdir(parents=True, exist_ok=True)
+_YF_INFO_TTL = 8 * 3600  # 8-hour disk cache for yfinance info
+
+
+def _get_yf_info(ticker: str) -> dict:
+    """Return yfinance info dict, reading from disk cache when rate-limited."""
+    path = _YF_INFO_CACHE / f"{ticker}_info.json"
+    try:
+        t = yf.Ticker(ticker)
+        info = t.info or {}
+        if len(info) > 5:
+            try:
+                path.write_text(json.dumps({
+                    '_ts': time.time(),
+                    'info': {k: v for k, v in info.items() if isinstance(v, (str, int, float, bool, type(None)))},
+                }))
+            except Exception:
+                pass
+            return info
+    except Exception:
+        pass
+    # Check dedicated info cache, then fall back to the 1y history cache (which also stores info)
+    for cache_path in (path, _YF_INFO_CACHE / f"{ticker}_1y.json"):
+        if cache_path.exists():
+            try:
+                cached = json.loads(cache_path.read_text())
+                info = cached.get('info', {})
+                if len(info) > 5:
+                    return info
+            except Exception:
+                pass
+    return {}
 
 CACHE_TTL = 15 * 60  # 15 minutes
 _cache: Optional[dict] = None
@@ -297,9 +333,31 @@ MARKET_THEMES = [
 # ── Lightweight single-ticker scan (no news/peers/analyst — just score+signal) ─
 def _quick_scan(ticker: str) -> Optional[dict]:
     try:
-        t = yf.Ticker(ticker)
-        info = t.info or {}
-        hist = t.history(period="1y")
+        info = _get_yf_info(ticker)
+
+        # Get history — try live yfinance, fall back to disk-cached 1y json
+        hist = None
+        try:
+            t = yf.Ticker(ticker)
+            h = t.history(period="1y")
+            if h is not None and len(h) >= 20:
+                hist = h
+        except Exception:
+            pass
+        if hist is None:
+            hist_cache = _YF_INFO_CACHE / f"{ticker}_1y.json"
+            if hist_cache.exists():
+                try:
+                    raw = json.loads(hist_cache.read_text())
+                    df_data = raw.get('data') or raw.get('history')
+                    if df_data:
+                        hist = pd.DataFrame(df_data)
+                        if 'Date' in hist.columns:
+                            hist['Date'] = pd.to_datetime(hist['Date'])
+                            hist.set_index('Date', inplace=True)
+                        hist.index = pd.to_datetime(hist.index)
+                except Exception:
+                    pass
         if hist is None or len(hist) < 20:
             return None
 
@@ -316,9 +374,9 @@ def _quick_scan(ticker: str) -> Optional[dict]:
         if raw_fcf and raw_rev and float(raw_rev) != 0:
             fcf_margin_raw = round(float(raw_fcf) / float(raw_rev) * 100, 1)
 
-        # Recent news check (last 7 days) — fetched before signals so count feeds signal_quality
+        # Recent news check (last 7 days)
         try:
-            raw_news = t.news or []
+            raw_news = yf.Ticker(ticker).news or []
             cutoff = time.time() - 7 * 86400
             news_recent = [n for n in raw_news[:10] if n.get("providerPublishTime", 0) > cutoff]
             has_recent_news = len(news_recent) > 0

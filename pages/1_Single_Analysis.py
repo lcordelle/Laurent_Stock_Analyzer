@@ -29,6 +29,7 @@ from utils.factor_grades import compute_factor_grades
 from utils.dividend_scorecard import compute_dividend_scorecard
 from utils.earnings_analysis import fetch_earnings_data
 from utils.ai_analyst import generate_analyst_report_full
+from utils.candlestick_patterns import detect_patterns, patterns_to_df
 
 require_auth()
 
@@ -180,6 +181,31 @@ if submitted and ticker:
                 earnings_data=earnings_data,
                 analyst_report=analyst_report,
             )
+
+            # Candlestick pattern recognition
+            try:
+                hist = data.get('history')
+                if hist is not None and len(hist) >= 5:
+                    patterns = detect_patterns(hist)
+                    if patterns:
+                        st.markdown("---")
+                        st.markdown("### Candlestick Patterns Detected")
+                        df_patterns = patterns_to_df(patterns)
+                        if not df_patterns.empty:
+                            bullish = df_patterns[df_patterns['Signal'].str.contains('Bullish')]
+                            bearish = df_patterns[df_patterns['Signal'].str.contains('Bearish')]
+                            neutral = df_patterns[df_patterns['Signal'].str.contains('Neutral')]
+                            c1, c2, c3 = st.columns(3)
+                            with c1:
+                                st.metric("Bullish Signals", len(bullish))
+                            with c2:
+                                st.metric("Bearish Signals", len(bearish))
+                            with c3:
+                                st.metric("Neutral Signals", len(neutral))
+                            st.dataframe(df_patterns, use_container_width=True, hide_index=True)
+            except Exception:
+                pass
+
         else:
             st.error(f"❌ Error fetching data for {ticker}")
             st.markdown("""

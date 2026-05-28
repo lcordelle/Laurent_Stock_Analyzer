@@ -1,0 +1,34 @@
+{
+  "mcpServers": {
+    "yahoo-finance": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/Alex2Yang97/yahoo-finance-mcp",
+        "yahoo-finance-mcp"
+      ]
+    },
+    "alpha-vantage": {
+      "command": "uvx",
+      "args": [
+        "marketdata-mcp-server",
+        "${ALPHA_VANTAGE_API_KEY}"
+      ]
+    },
+    "sec-edgar": {
+      "command": "uvx",
+      "args": ["sec-edgar-mcp"],
+      "env": {
+        "SEC_EDGAR_USER_AGENT": "Laurent Cordelle (lcordelle@virtualfusion.ai)"
+      }
+    },
+    "tradingview": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "tradingview-mcp-server",
+        "tradingview-mcp"
+      ]
+    }
+  }
+}

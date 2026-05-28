@@ -5,6 +5,8 @@ Simplified for local use with Yahoo Finance
 """
 
 import logging
+import threading
+from concurrent.futures import ThreadPoolExecutor
 import yfinance as yf
 from utils.ticker_resolver import resolve_to_ticker
 from utils.alpha_vantage_client import AlphaVantageClient
@@ -18,9 +20,11 @@ logger = logging.getLogger(__name__)
 
 class StockAnalyzer:
     """Advanced Stock Analysis Engine"""
-    
+
+    _cache: dict = {}  # class-level — shared across all instances (warmer + Streamlit sessions)
+
     def __init__(self):
-        self.cache = {}
+        pass
     
     def get_stock_data(self, ticker, period="1y"):
         """Fetch stock data.
@@ -35,9 +39,9 @@ class StockAnalyzer:
         ticker = resolved if resolved else query.upper()
 
         cache_key = f"{ticker}_{period}"
-        if cache_key in self.cache:
-            entry = self.cache[cache_key]
-            if time.time() - entry.get('timestamp', 0) < 300:
+        if cache_key in StockAnalyzer._cache:
+            entry = StockAnalyzer._cache[cache_key]
+            if time.time() - entry.get('timestamp', 0) < 1800:
                 return entry['data']
 
         disk_cache_dir = Path.home() / '.cache' / 'stock_analyzer' / 'yf_cache'
@@ -82,25 +86,42 @@ class StockAnalyzer:
 
         try:
             stock = yf.Ticker(ticker)
-            hist = stock.history(period=period)
+
+            def _get(future, default=None):
+                try:
+                    v = future.result()
+                    return v if v is not None else (default if default is not None else pd.DataFrame())
+                except Exception:
+                    return default if default is not None else pd.DataFrame()
+
+            with ThreadPoolExecutor(max_workers=5) as pool:
+                f_hist = pool.submit(lambda: stock.history(period=period))
+                f_info = pool.submit(lambda: stock.info)
+                f_fin  = pool.submit(lambda: stock.financials)
+                f_bs   = pool.submit(lambda: stock.balance_sheet)
+                f_cf   = pool.submit(lambda: stock.cashflow)
+
+            hist          = _get(f_hist, pd.DataFrame())
+            info          = _get(f_info, {})
+            financials    = _get(f_fin,  pd.DataFrame())
+            balance_sheet = _get(f_bs,   pd.DataFrame())
+            cash_flow     = _get(f_cf,   pd.DataFrame())
+
             if hist is None or len(hist) == 0:
                 raise Exception("no_data")
 
-            def _safe(fn):
+            # Supplement empty info from disk cache (e.g. yfinance rate-limited)
+            if len(info) < 5 and disk_cache_path.exists():
                 try:
-                    v = fn()
-                    return v if v is not None else pd.DataFrame()
+                    _disk = json.loads(disk_cache_path.read_text())
+                    if len(_disk.get('info', {})) > 5:
+                        info = _disk['info']
                 except Exception:
-                    return pd.DataFrame()
+                    pass
 
-            info = _safe(lambda: stock.info) or {}
-            financials = _safe(lambda: stock.financials)
-            balance_sheet = _safe(lambda: stock.balance_sheet)
-            cash_flow = _safe(lambda: stock.cashflow)
+            data_source = 'yfinance'
 
-            info, data_source = _enrich_with_av(info)
-
-            # Persist serialisable subset for stale fallback
+            # Persist yfinance info to disk immediately for stale fallback
             try:
                 disk_cache_path.write_text(json.dumps({
                     '_ts': time.time(), '_cached_at': _dt.utcnow().isoformat(),
@@ -109,13 +130,26 @@ class StockAnalyzer:
             except Exception:
                 pass
 
+            # AV enrichment runs in background — overwrites disk cache when done; next request picks it up
+            if av_key:
+                def _enrich_async(info_copy=dict(info), dpath=disk_cache_path):
+                    enriched, _ = _enrich_with_av(info_copy)
+                    try:
+                        dpath.write_text(json.dumps({
+                            '_ts': time.time(), '_cached_at': _dt.utcnow().isoformat(),
+                            'info': {k: v for k, v in enriched.items() if isinstance(v, (str, int, float, bool, type(None)))},
+                        }))
+                    except Exception:
+                        pass
+                threading.Thread(target=_enrich_async, daemon=True).start()
+
             result = {
                 'ticker': ticker, 'history': hist, 'info': info,
                 'financials': financials, 'balance_sheet': balance_sheet,
                 'cash_flow': cash_flow, 'stock_object': stock,
                 'data_source': data_source, 'cached_at': None, 'is_stale': False,
             }
-            self.cache[cache_key] = {'data': result, 'timestamp': time.time()}
+            StockAnalyzer._cache[cache_key] = {'data': result, 'timestamp': time.time()}
             return result
 
         except Exception as live_err:
@@ -145,7 +179,7 @@ class StockAnalyzer:
                         'data_source': 'Alpha Vantage (stale cache)',
                         'cached_at': cached_at, 'is_stale': True,
                     }
-                    self.cache[cache_key] = {'data': result, 'timestamp': time.time()}
+                    StockAnalyzer._cache[cache_key] = {'data': result, 'timestamp': time.time()}
                     return result
                 except Exception:
                     pass

@@ -41,7 +41,32 @@ def render_top_navigation():
             if st.button("🚪", key="nav_btn_logout", use_container_width=True, help="Sign out"):
                 st.session_state.authenticated = False
                 st.rerun()
-    
+
+    # Second row: pro trader feature pages
+    pn1, pn2, pn3, pn4, pn5, pn_spacer = st.columns([1, 1, 1, 1, 1, 1.5])
+    with pn1:
+        if st.button("🔬 Advanced", key="nav_btn_advanced", use_container_width=True):
+            st.switch_page("pages/6_Advanced_Analysis.py")
+    with pn2:
+        if st.button("📓 Journal", key="nav_btn_journal", use_container_width=True):
+            st.switch_page("pages/7_Trade_Journal.py")
+    with pn3:
+        if st.button("🔔 Alerts", key="nav_btn_alerts", use_container_width=True):
+            st.switch_page("pages/8_Alerts.py")
+    with pn4:
+        if st.button("⏪ Backtest", key="nav_btn_backtest", use_container_width=True):
+            st.switch_page("pages/9_Backtesting.py")
+    with pn5:
+        if st.button("📋 Reports", key="nav_btn_reports", use_container_width=True):
+            st.switch_page("pages/4_Reports.py")
+
+    # Market regime banner — shown on every page automatically
+    try:
+        from components.market_regime_banner import render_market_regime_banner
+        render_market_regime_banner()
+    except Exception:
+        pass
+
     # Theme toggle
     col1, col2, col3 = st.columns([1, 1, 0.1])
     with col3:
@@ -54,3 +79,12 @@ def render_top_navigation():
 def render_navigation():
     """Legacy function - now renders top navigation"""
     render_top_navigation()
+
+
+def render_market_regime_inline() -> None:
+    """Convenience wrapper — imports and calls the banner component."""
+    try:
+        from components.market_regime_banner import render_market_regime_banner
+        render_market_regime_banner()
+    except Exception:
+        pass

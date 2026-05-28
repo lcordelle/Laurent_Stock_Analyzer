@@ -1,6 +1,7 @@
 from __future__ import annotations
 import asyncio
 import logging
+import time
 from typing import Optional
 import yfinance as yf
 from fastapi import APIRouter, Depends
@@ -9,6 +10,8 @@ from api.auth import verify_token
 
 router = APIRouter(tags=["market_pulse"])
 logger = logging.getLogger(__name__)
+
+_PULSE_CACHE_TTL = 120  # 2 minutes
 
 INDICES = [
     ("S&P 500",      "^GSPC"),
@@ -53,15 +56,28 @@ class MarketPulseResponse(BaseModel):
     market_breadth: Optional[str] = None
 
 
+_pulse_cache: Optional[MarketPulseResponse] = None
+_pulse_cache_ts: float = 0.0
+
+
+def _fast_info_quote(symbol: str) -> tuple[float | None, float | None]:
+    """Return (price, change_pct) using fast_info — works after market close."""
+    info = yf.Ticker(symbol).fast_info
+    price = info.get("lastPrice") or info.get("regularMarketPrice")
+    prev = info.get("regularMarketPreviousClose") or info.get("previousClose")
+    if price is None:
+        return None, None
+    price = float(price)
+    chg = round((price - float(prev)) / float(prev) * 100, 2) if prev and float(prev) > 0 else None
+    return round(price, 2), chg
+
+
 def _fetch_quote(label: str, symbol: str) -> IndexQuote:
     try:
-        hist = yf.Ticker(symbol).history(period="5d")
-        if hist is None or len(hist) < 2:
+        price, chg = _fast_info_quote(symbol)
+        if price is None:
             return IndexQuote(label=label, symbol=symbol)
-        price = float(hist["Close"].iloc[-1])
-        prev = float(hist["Close"].iloc[-2])
-        chg = round((price - prev) / prev * 100, 2) if prev > 0 else 0.0
-        return IndexQuote(label=label, symbol=symbol, price=round(price, 2), change_pct=chg, up=chg >= 0)
+        return IndexQuote(label=label, symbol=symbol, price=price, change_pct=chg, up=(chg or 0) >= 0)
     except Exception as e:
         logger.warning("Quote failed for %s: %s", symbol, e)
         return IndexQuote(label=label, symbol=symbol)
@@ -69,12 +85,9 @@ def _fetch_quote(label: str, symbol: str) -> IndexQuote:
 
 def _fetch_sector(sector: str, symbol: str) -> SectorPerf:
     try:
-        hist = yf.Ticker(symbol).history(period="5d")
-        if hist is None or len(hist) < 2:
+        _, chg = _fast_info_quote(symbol)
+        if chg is None:
             return SectorPerf(sector=sector)
-        price = float(hist["Close"].iloc[-1])
-        prev = float(hist["Close"].iloc[-2])
-        chg = round((price - prev) / prev * 100, 2) if prev > 0 else 0.0
         return SectorPerf(sector=sector, change_pct=chg, up=chg >= 0)
     except Exception as e:
         logger.warning("Sector quote failed for %s: %s", symbol, e)
@@ -83,6 +96,10 @@ def _fetch_sector(sector: str, symbol: str) -> SectorPerf:
 
 @router.get("/market-pulse", response_model=MarketPulseResponse)
 async def get_market_pulse(_: str = Depends(verify_token)):
+    global _pulse_cache, _pulse_cache_ts
+    if _pulse_cache is not None and (time.time() - _pulse_cache_ts) < _PULSE_CACHE_TTL:
+        return _pulse_cache
+
     loop = asyncio.get_event_loop()
 
     index_tasks = [loop.run_in_executor(None, _fetch_quote, lbl, sym) for lbl, sym in INDICES]
@@ -103,7 +120,6 @@ async def get_market_pulse(_: str = Depends(verify_token)):
         if isinstance(r, SectorPerf):
             sectors.append(r)
 
-    # Breadth: % of sectors positive
     valid_sectors = [s for s in sectors if s.change_pct is not None]
     if valid_sectors:
         up_count = sum(1 for s in valid_sectors if s.up)
@@ -113,4 +129,8 @@ async def get_market_pulse(_: str = Depends(verify_token)):
     else:
         breadth = None
 
-    return MarketPulseResponse(indices=indices, sectors=sectors, market_breadth=breadth)
+    result = MarketPulseResponse(indices=indices, sectors=sectors, market_breadth=breadth)
+    if any(i.price is not None for i in indices):
+        _pulse_cache = result
+        _pulse_cache_ts = time.time()
+    return result

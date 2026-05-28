@@ -5,14 +5,32 @@ import {
 } from 'recharts'
 import type { OHLCVRow, IndicatorData, FullStockAnalysis, EarningsDate } from '../../lib/types'
 
+interface PatternMarker {
+  date: string
+  pattern: string
+  direction: string
+  confidence: number
+}
+
 interface Props {
   ohlcv: OHLCVRow[]
   indicators?: IndicatorData
   tradingSignals?: FullStockAnalysis['trading_signals']
   earningsDates?: EarningsDate[]
   relativeStrength?: (number | null)[]
+  patterns?: PatternMarker[]
   period: string
   onPeriodChange: (p: string) => void
+}
+
+const PATTERN_INFO: Record<string, { meaning: string; action: string }> = {
+  'Hammer':            { meaning: 'Buyers rejected a sharp selloff — the long lower wick shows sellers tried and failed to hold price down.', action: 'Watch for bullish follow-through above the candle high. Volume on the next candle confirms strength.' },
+  'Shooting Star':     { meaning: 'Sellers rejected a rally — the long upper wick shows bulls lost control near the session high.', action: 'Reduce long exposure or wait for bearish confirmation on the next candle before shorting.' },
+  'Doji':              { meaning: 'Opening and closing price are nearly equal — the market is indecisive and a reversal or pause is possible.', action: 'Do not act alone on a Doji. Wait for the next candle to confirm direction.' },
+  'Bullish Engulfing': { meaning: 'The current green candle fully engulfs the prior red candle — a decisive shift from sellers to buyers.', action: 'High-probability long setup. Consider entry at the close of the engulfing candle with a stop below its low.' },
+  'Bearish Engulfing': { meaning: 'The current red candle fully engulfs the prior green candle — sellers took decisive control from buyers.', action: 'Consider reducing longs or entering short. Confirm with volume and a test of key support.' },
+  'Morning Star':      { meaning: '3-candle bullish reversal: large down candle, small indecision body, then a strong up candle closing into the first candle. Classic bottom signal.', action: 'Strong long entry signal after a downtrend. Volume spike on the third candle is the key confirmation.' },
+  'Evening Star':      { meaning: '3-candle bearish reversal: large up candle, small indecision body, then a strong down candle. Classic top signal.', action: 'Consider taking profits on longs or entering short. Best used at resistance levels after an extended uptrend.' },
 }
 
 const PERIODS = [
@@ -37,6 +55,17 @@ interface TooltipData {
   x: number; y: number
   signal: 'BUY' | 'SELL'
   reasons: string[]
+  date: string
+  price: number
+}
+
+interface PatternTooltipData {
+  x: number; y: number
+  name: string
+  direction: string
+  meaning: string
+  action: string
+  confidence: number
   date: string
   price: number
 }
@@ -108,13 +137,15 @@ function computeMarkers(ohlcv: OHLCVRow[], ind: IndicatorData): SignalMarker[] {
   return out
 }
 
-export default function CandlestickChart({ ohlcv, indicators, tradingSignals, earningsDates, relativeStrength, period, onPeriodChange }: Props) {
+export default function CandlestickChart({ ohlcv, indicators, tradingSignals, earningsDates, relativeStrength, patterns, period, onPeriodChange }: Props) {
   const mainRef = useRef<HTMLDivElement>(null)
   const volRef = useRef<HTMLDivElement>(null)
   const mainChartRef = useRef<import('lightweight-charts').IChartApi | null>(null)
   const volChartRef = useRef<import('lightweight-charts').IChartApi | null>(null)
   const markersMapRef = useRef<Map<string, SignalMarker>>(new Map())
+  const patternsMapRef = useRef<Map<string, PatternMarker>>(new Map())
   const [tooltip, setTooltip] = useState<TooltipData | null>(null)
+  const [patternTooltip, setPatternTooltip] = useState<PatternTooltipData | null>(null)
   const [showRS, setShowRS] = useState(false)
   const [earningsLines, setEarningsLines] = useState<{ x: number; color: string; beat: boolean | null | undefined; date: string }[]>([])
 
@@ -259,6 +290,49 @@ export default function CandlestickChart({ ohlcv, indicators, tradingSignals, ea
           }))
           .filter(m => candles.some(c => c.time === m.time))
         lwMarkers.push(...earningsMarkers)
+      }
+
+      // Candlestick pattern markers — overlaid directly on the chart
+      patternsMapRef.current = new Map()
+      if (patterns && patterns.length > 0) {
+        const abbr: Record<string, string> = {
+          'Hammer': 'H', 'Shooting Star': 'SS', 'Doji': 'D',
+          'Bullish Engulfing': 'BE', 'Bearish Engulfing': 'SE',
+          'Morning Star': 'MS', 'Evening Star': 'ES',
+        }
+        for (const p of patterns) {
+          const t = p.date.slice(0, 10) as import('lightweight-charts').Time
+          if (!candles.some(c => c.time === t)) continue
+          patternsMapRef.current.set(p.date.slice(0, 10), p)
+          lwMarkers.push({
+            time: t,
+            position: p.direction === 'bearish' ? 'aboveBar' : 'belowBar',
+            color: p.direction === 'bullish' ? '#00e676' : p.direction === 'bearish' ? '#ff1744' : '#ffab00',
+            shape: p.direction === 'bullish' ? 'arrowUp' : p.direction === 'bearish' ? 'arrowDown' : 'circle',
+            text: abbr[p.pattern] ?? p.pattern.slice(0, 2),
+          })
+        }
+
+        mainChart.subscribeCrosshairMove(param => {
+          if (!param.time || !param.point) { setPatternTooltip(null); return }
+          const timeStr = typeof param.time === 'object'
+            ? `${(param.time as { year: number; month: number; day: number }).year}-${String((param.time as { year: number; month: number; day: number }).month).padStart(2, '0')}-${String((param.time as { year: number; month: number; day: number }).day).padStart(2, '0')}`
+            : String(param.time)
+          const p = patternsMapRef.current.get(timeStr)
+          if (!p) { setPatternTooltip(null); return }
+          const bar = ohlcv.find(r => r.date.slice(0, 10) === timeStr)
+          const info = PATTERN_INFO[p.pattern]
+          setPatternTooltip({
+            x: param.point.x, y: param.point.y,
+            name: p.pattern,
+            direction: p.direction,
+            meaning: info?.meaning ?? `${p.pattern} pattern detected.`,
+            action: info?.action ?? 'Review chart context before acting.',
+            confidence: p.confidence,
+            date: timeStr,
+            price: bar?.close ?? 0,
+          })
+        })
       }
 
       if (lwMarkers.length > 0) {
@@ -431,7 +505,7 @@ export default function CandlestickChart({ ohlcv, indicators, tradingSignals, ea
       mainChartRef.current = null
       volChartRef.current = null
     }
-  }, [ohlcv, indicators, tradingSignals, earningsDates, relativeStrength, showRS])
+  }, [ohlcv, indicators, tradingSignals, earningsDates, relativeStrength, patterns, showRS])
 
   const rsiLast = useMemo(() => {
     if (!indicators?.rsi) return null
@@ -562,6 +636,34 @@ export default function CandlestickChart({ ohlcv, indicators, tradingSignals, ea
             ))}
           </div>
         )}
+        {patternTooltip && (() => {
+          const c = patternTooltip.direction === 'bullish' ? '#00e676' : patternTooltip.direction === 'bearish' ? '#ff1744' : '#ffab00'
+          const icon = patternTooltip.direction === 'bullish' ? '▲' : patternTooltip.direction === 'bearish' ? '▼' : '◆'
+          return (
+            <div
+              className="absolute pointer-events-none z-20 rounded-xl border p-3 text-xs shadow-2xl"
+              style={{
+                left: Math.min(patternTooltip.x + 14, (mainRef.current?.clientWidth ?? 600) - 230),
+                top: Math.max(patternTooltip.y + (tooltip ? 130 : -20), 8),
+                backgroundColor: '#0d1526',
+                borderColor: c + '60',
+                minWidth: 210,
+                maxWidth: 280,
+                backdropFilter: 'blur(8px)',
+              }}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <span className="font-black text-sm" style={{ color: c }}>{icon} {patternTooltip.name}</span>
+                <span className="tabular-nums" style={{ color: '#475569' }}>${patternTooltip.price.toFixed(2)}</span>
+              </div>
+              <div className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: '#475569' }}>What it means</div>
+              <p className="mb-2 leading-relaxed" style={{ color: '#94a3b8' }}>{patternTooltip.meaning}</p>
+              <div className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: '#475569' }}>Suggested action</div>
+              <p className="leading-relaxed" style={{ color: c }}>{patternTooltip.action}</p>
+              <div className="mt-2" style={{ color: '#334155' }}>Confidence {patternTooltip.confidence}% · {patternTooltip.date}</div>
+            </div>
+          )
+        })()}
       </div>
 
       {/* Volume chart */}

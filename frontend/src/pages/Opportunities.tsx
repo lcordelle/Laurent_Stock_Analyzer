@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { advancedApi } from '../services/api'
 import { Loader2, Target, Shield, Zap, TrendingUp, TrendingDown, BarChart2, ChevronUp, ChevronDown, RefreshCw, BookmarkPlus, Check, Star } from 'lucide-react'
 import { opportunitiesApi } from '../services/api'
 import { fmt, scoreColor, changeColor } from '../lib/formatters'
@@ -982,6 +983,14 @@ export default function Opportunities() {
     queryKey: ['opportunities'],
     queryFn: () => opportunitiesApi.get(),
     staleTime: 2 * 60_000,
+    retry: 5,
+    retryDelay: (attempt) => Math.min(5000 * (attempt + 1), 30_000),
+  })
+
+  const { data: regime } = useQuery({
+    queryKey: ['market-regime'],
+    queryFn: advancedApi.marketBreadth,
+    staleTime: 5 * 60_000,
   })
 
   const [activeMainTab, setActiveMainTab] = useState<'scan' | 'top50'>('scan')
@@ -1036,6 +1045,35 @@ export default function Opportunities() {
           </button>
         </div>
 
+        {/* Market Regime Warning */}
+        {regime?.regime && regime.regime !== 'Unknown' && (
+          <div
+            className="flex items-center justify-between px-4 py-3 rounded-xl text-sm"
+            style={{
+              backgroundColor: regime.color + '12',
+              border: `1px solid ${regime.color}35`,
+            }}
+          >
+            <div className="flex items-center gap-3">
+              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: regime.color }} />
+              <span className="font-semibold" style={{ color: regime.color }}>{regime.regime}</span>
+              <span style={{ color: '#94a3b8' }}>{regime.description}</span>
+              {regime.vix != null && (
+                <span className="text-xs px-2 py-0.5 rounded font-mono"
+                  style={{ backgroundColor: 'rgba(255,255,255,0.04)', color: '#475569' }}>
+                  VIX {regime.vix}
+                </span>
+              )}
+            </div>
+            {regime.spy_change != null && (
+              <span className="text-xs font-semibold tabular-nums"
+                style={{ color: regime.spy_change >= 0 ? '#00e676' : '#ff1744' }}>
+                SPY {regime.spy_change >= 0 ? '+' : ''}{regime.spy_change.toFixed(2)}%
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Main tab bar */}
         <div className="flex gap-1 p-1 rounded-xl w-fit" style={{ backgroundColor: '#0d1424', border: '1px solid rgba(255,255,255,0.06)' }}>
           {([
@@ -1069,11 +1107,34 @@ export default function Opportunities() {
 
         {isError && (
           <div className="rounded-xl border p-5" style={{ backgroundColor: 'rgba(255,23,68,0.05)', borderColor: 'rgba(255,23,68,0.2)' }}>
-            <p className="text-sm" style={{ color: '#ff1744' }}>Unable to load market scan. Check backend connection.</p>
+            <p className="text-sm font-semibold mb-1" style={{ color: '#ff1744' }}>Market scan unavailable</p>
+            <p className="text-xs mb-3" style={{ color: '#94a3b8' }}>
+              The background scan may still be warming up after a server restart. This typically takes 60–120s.
+            </p>
+            <button
+              onClick={() => refetch()}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold"
+              style={{ backgroundColor: '#ff174420', border: '1px solid rgba(255,23,68,0.3)', color: '#ff1744' }}
+            >
+              <RefreshCw className="w-3.5 h-3.5" /> Retry Now
+            </button>
           </div>
         )}
 
-        {data && activeMainTab === 'scan' && (
+        {data && data.all_ideas.length === 0 && !isLoading && (
+          <div className="rounded-xl border p-6 flex flex-col items-center gap-3 text-center" style={{ backgroundColor: 'rgba(0,212,255,0.05)', borderColor: 'rgba(0,212,255,0.15)' }}>
+            <Loader2 className="w-6 h-6 animate-spin" style={{ color: '#00d4ff' }} />
+            <div>
+              <p className="text-sm font-semibold mb-1" style={{ color: '#e2e8f0' }}>Market scan is rebuilding</p>
+              <p className="text-xs" style={{ color: '#94a3b8' }}>
+                The data source is temporarily rate-limited. The scan will auto-complete within 15–30 minutes.<br />
+                You can also click Refresh to try immediately.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {data && data.all_ideas.length > 0 && activeMainTab === 'scan' && (
           <>
             {/* Market Pulse */}
             <MarketPulse data={data} />

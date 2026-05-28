@@ -12,6 +12,10 @@ import Opportunities from './pages/Opportunities'
 import Watchlist from './pages/Watchlist'
 import PennyStocks from './pages/PennyStocks'
 import AiPredictor from './pages/AiPredictor'
+import Advanced from './pages/Advanced'
+import Journal from './pages/Journal'
+import Alerts from './pages/Alerts'
+import Backtest from './pages/Backtest'
 import './index.css'
 
 const qc = new QueryClient({ defaultOptions: { queries: { retry: 1, staleTime: 5 * 60 * 1000 } } })
@@ -40,6 +44,10 @@ export default function App() {
                 <Route path="/watchlist" element={<Watchlist />} />
                 <Route path="/penny-stocks" element={<PennyStocks />} />
                 <Route path="/ai-predictor" element={<AiPredictor />} />
+                <Route path="/advanced" element={<Advanced />} />
+                <Route path="/journal" element={<Journal />} />
+                <Route path="/alerts" element={<Alerts />} />
+                <Route path="/backtest" element={<Backtest />} />
               </Routes>
             </AuthGate>
           } />

@@ -17,7 +17,7 @@ router = APIRouter(tags=["opportunities"])
 logger = logging.getLogger(__name__)
 
 _analyzer = StockAnalyzer()
-_SEM = asyncio.Semaphore(8)  # reduced from 30 — yfinance rate-limits at high concurrency
+_SEM = asyncio.Semaphore(4)  # low concurrency to avoid yfinance rate-limits
 
 _YF_INFO_CACHE = Path.home() / '.cache' / 'stock_analyzer' / 'yf_cache'
 _YF_INFO_CACHE.mkdir(parents=True, exist_ok=True)
@@ -56,6 +56,28 @@ def _get_yf_info(ticker: str) -> dict:
 CACHE_TTL = 15 * 60  # 15 minutes
 _cache: Optional[dict] = None
 _cache_ts: float = 0.0
+
+_OPPS_DISK_PATH = Path.home() / '.cache' / 'stock_analyzer' / 'opportunities_cache.json'
+
+
+def _restore_cache_from_disk() -> None:
+    global _cache, _cache_ts
+    if not _OPPS_DISK_PATH.exists():
+        return
+    try:
+        import json as _json
+        data = _json.loads(_OPPS_DISK_PATH.read_text())
+        if data.get("passed_count", 0) == 0 or len(data.get("all_ideas", [])) == 0:
+            logger.info("Skipping empty opportunities disk cache (passed_count=0)")
+            return
+        _cache = data
+        _cache_ts = data.get('cached_at', 0)
+        logger.info("Opportunities cache restored from disk (age %.0fs)", time.time() - _cache_ts)
+    except Exception as e:
+        logger.warning("Failed to restore opportunities cache from disk: %s", e)
+
+
+_restore_cache_from_disk()
 
 # ── ~500-stock universe across 20 domains ────────────────────────────────────
 SCAN_UNIVERSE: dict[str, list[str]] = {
@@ -337,25 +359,53 @@ def _quick_scan(ticker: str) -> Optional[dict]:
 
         # Get history — try live yfinance, fall back to disk-cached 1y json
         hist = None
-        try:
-            t = yf.Ticker(ticker)
-            h = t.history(period="1y")
-            if h is not None and len(h) >= 20:
-                hist = h
-        except Exception:
-            pass
+        hist_cache = _YF_INFO_CACHE / f"{ticker}_1y.json"
+        # Try Ticker.history first, fall back to yf.download (different endpoint, different rate-limit bucket)
+        for attempt in range(2):
+            try:
+                if attempt == 0:
+                    h = yf.Ticker(ticker).history(period="1y")
+                else:
+                    h = yf.download(ticker, period="1y", progress=False, auto_adjust=True)
+                    if isinstance(h.columns, pd.MultiIndex):
+                        h.columns = h.columns.get_level_values(0)
+                if h is not None and len(h) >= 20:
+                    hist = h
+                    # Persist to disk so future scans survive rate-limits
+                    try:
+                        records = h[['Open','High','Low','Close','Volume']].reset_index()
+                        records.rename(columns={records.columns[0]: 'Date'}, inplace=True)
+                        records['Date'] = records['Date'].astype(str)
+                        existing = json.loads(hist_cache.read_text()) if hist_cache.exists() else {}
+                        existing.update({'_ts': time.time(), 'history': records.to_dict('records')})
+                        hist_cache.write_text(json.dumps(existing))
+                    except Exception:
+                        pass
+                    break
+            except Exception:
+                pass
         if hist is None:
-            hist_cache = _YF_INFO_CACHE / f"{ticker}_1y.json"
             if hist_cache.exists():
                 try:
                     raw = json.loads(hist_cache.read_text())
-                    df_data = raw.get('data') or raw.get('history')
+                    df_data = raw.get('history') or raw.get('data')
                     if df_data:
                         hist = pd.DataFrame(df_data)
                         if 'Date' in hist.columns:
-                            hist['Date'] = pd.to_datetime(hist['Date'])
+                            dates = pd.to_datetime(hist['Date'])
+                            if dates.dt.tz is not None:
+                                dates = dates.dt.tz_convert(None)
+                            hist['Date'] = dates
                             hist.set_index('Date', inplace=True)
-                        hist.index = pd.to_datetime(hist.index)
+                        else:
+                            idx = pd.to_datetime(hist.index)
+                            if idx.tz is not None:
+                                idx = idx.tz_convert(None)
+                            hist.index = idx
+                        for col in ['Open', 'High', 'Low', 'Close', 'Volume']:
+                            if col in hist.columns:
+                                hist[col] = pd.to_numeric(hist[col], errors='coerce')
+                        hist = hist.dropna(subset=['Close'])
                 except Exception:
                     pass
         if hist is None or len(hist) < 20:
@@ -654,6 +704,7 @@ async def _run_scan() -> dict:
 
     async def fetch(ticker: str) -> Optional[dict]:
         async with _SEM:
+            await asyncio.sleep(0.3)  # ~1.3 req/s per slot = ~5 req/s total; avoids rate-limit
             result = await loop.run_in_executor(None, _quick_scan, ticker)
             if result is not None:
                 result["domain"] = ticker_domain[ticker]
@@ -711,8 +762,19 @@ async def _run_scan() -> dict:
         "domain_stats": domain_stats,
     }
 
+    if len(results) < 50 and _cache is not None and _cache.get("passed_count", 0) > 0:
+        # Scan was likely rate-limited — don't overwrite a good cache with empty results
+        logger.warning("Scan yielded only %d results (rate limited?), keeping existing cache", len(results))
+        return _cache
+
     _cache = payload
     _cache_ts = time.time()
+    try:
+        import json as _json
+        _OPPS_DISK_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _OPPS_DISK_PATH.write_text(_json.dumps(payload, default=str))
+    except Exception as e:
+        logger.warning("Failed to persist opportunities cache to disk: %s", e)
     logger.info("Opportunities scan complete — %d/%d passed, cached for %d min", len(passing), total, CACHE_TTL // 60)
     return payload
 
@@ -735,17 +797,26 @@ def _payload_to_response(p: dict) -> MarketOpportunitiesResponse:
 
 @router.get("/opportunities", response_model=MarketOpportunitiesResponse)
 async def get_opportunities(_: str = Depends(verify_token)):
-    global _cache, _cache_ts
-    age = time.time() - _cache_ts
-    if _cache is not None and age < CACHE_TTL:
-        logger.debug("Opportunities served from cache (age %.0fs)", age)
-        return _payload_to_response(_cache)
-    return _payload_to_response(await _run_scan())
+    if _cache is None:
+        # Background scan is still warming — poll up to 30s before giving up
+        for _ in range(60):
+            await asyncio.sleep(0.5)
+            if _cache is not None:
+                break
+    if _cache is None:
+        from fastapi import HTTPException
+        raise HTTPException(503, detail="Scan still warming, please retry in a few seconds")
+    logger.debug("Opportunities served from cache (age %.0fs)", time.time() - _cache_ts)
+    return _payload_to_response(_cache)
 
 
 @router.post("/opportunities/refresh", response_model=MarketOpportunitiesResponse)
 async def refresh_opportunities(_: str = Depends(verify_token)):
-    """Force a fresh scan, bypassing the cache."""
+    """Schedule a fresh background scan and return the current cache immediately."""
     global _cache_ts
-    _cache_ts = 0.0
+    _cache_ts = 0.0  # expire cache so the background loop picks it up next cycle
+    asyncio.create_task(_run_scan())  # fire-and-forget — doesn't block the response
+    if _cache is not None:
+        return _payload_to_response(_cache)
+    # No cache yet (first boot) — wait for the scan
     return _payload_to_response(await _run_scan())

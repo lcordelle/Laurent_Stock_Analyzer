@@ -29,24 +29,6 @@ else
   log "FastAPI already running"
 fi
 
-# 2. React / Vite dev server (port 3000)
-if ! curl -sf --max-time 2 -o /dev/null "http://127.0.0.1:3000/" 2>/dev/null; then
-  log "Starting Vite dev server (port 3000)..."
-  cd "$PROJECT_ROOT/frontend"
-  npm run dev >> "$PROJECT_ROOT/logs/vite.log" 2>&1 &
-  cd "$PROJECT_ROOT"
-  for i in {1..45}; do
-    sleep 1
-    if curl -sf --max-time 3 -o /dev/null "http://127.0.0.1:3000/" 2>/dev/null; then
-      log "Vite ready"
-      break
-    fi
-    [[ $i -eq 45 ]] && { log "ERROR: Vite failed to start. Check logs/vite.log"; exit 1; }
-  done
-else
-  log "Vite already running"
-fi
-
-# 3. ngrok tunnel → React frontend
-log "Starting ngrok tunnel (laurent.ngrok.io → port 3000)..."
-exec ngrok http 3000 --url "https://laurent.ngrok.io"
+# 2. ngrok tunnel → FastAPI (serves built frontend + API)
+log "Starting ngrok tunnel (laurent.ngrok.io → port 8000)..."
+exec ngrok http 8000 --url "https://laurent.ngrok.io"

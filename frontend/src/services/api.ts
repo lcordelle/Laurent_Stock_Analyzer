@@ -84,4 +84,40 @@ export const aiPredictorApi = {
   predict: (ticker: string) => api.get(`/ai-predictor/${ticker}`).then(r => r.data),
 }
 
+export const advancedApi = {
+  options: (ticker: string) => api.get(`/advanced/options/${ticker}`).then(r => r.data),
+  insider: (ticker: string) => api.get(`/advanced/insider/${ticker}`).then(r => r.data),
+  shortInterest: (ticker: string) => api.get(`/advanced/short-interest/${ticker}`).then(r => r.data),
+  institutional: (ticker: string) => api.get(`/advanced/institutional/${ticker}`).then(r => r.data),
+  patterns: (ticker: string) => api.get(`/advanced/patterns/${ticker}`).then(r => r.data),
+  marketBreadth: () => api.get('/market-breadth').then(r => r.data),
+}
+
+export const journalApi = {
+  open: () => api.get('/journal/open').then(r => r.data),
+  closed: () => api.get('/journal/closed').then(r => r.data),
+  summary: () => api.get('/journal/summary').then(r => r.data),
+  add: (body: {
+    ticker: string; direction: string; entry_date: string;
+    entry_price: number; shares: number; notes?: string; tags?: string
+  }) => api.post('/journal/add', body).then(r => r.data),
+  close: (id: number, exit_date: string, exit_price: number) =>
+    api.post(`/journal/${id}/close`, { exit_date, exit_price }).then(r => r.data),
+  delete: (id: number) => api.delete(`/journal/${id}`).then(r => r.data),
+}
+
+export const alertsApi = {
+  list: () => api.get('/alerts').then(r => r.data),
+  add: (ticker: string, condition: string, threshold: number) =>
+    api.post('/alerts/add', { ticker, condition, threshold }).then(r => r.data),
+  delete: (id: string) => api.delete(`/alerts/${id}`).then(r => r.data),
+  reset: (id: string) => api.post(`/alerts/${id}/reset`).then(r => r.data),
+}
+
+export const backtestApi = {
+  strategies: () => api.get('/backtest/strategies').then(r => r.data),
+  run: (ticker: string, strategy: string, period: string, initial_capital: number) =>
+    api.post('/backtest/run', { ticker, strategy, period, initial_capital }).then(r => r.data),
+}
+
 export default api

@@ -11,6 +11,18 @@ from components.navigation import render_top_navigation
 # Auth check (in-app login for mobile compatibility)
 require_auth()
 
+# Start background cache pre-warmer once per session
+if "warmer_started" not in st.session_state:
+    st.session_state.warmer_started = True
+    from utils.startup_warmer import start_warmer
+    start_warmer()
+
+# Start alert engine background thread once per session
+if "alert_engine_started" not in st.session_state:
+    st.session_state.alert_engine_started = True
+    from utils.alert_engine import start_alert_engine
+    start_alert_engine()
+
 # Page configuration
 st.set_page_config(
     page_title="Laurent Stock Analyzer",

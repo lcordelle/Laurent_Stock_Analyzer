@@ -1,5 +1,7 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../../hooks/useAuth'
+import { advancedApi } from '../../services/api'
 
 const NAV_LINKS = [
   { to: '/', label: 'Dashboard' },
@@ -8,8 +10,9 @@ const NAV_LINKS = [
   { to: '/watchlist', label: '★ Watchlist' },
   { to: '/penny-stocks', label: '💎 Penny Buys' },
   { to: '/ai-predictor', label: '🤖 AI Predictor' },
-  { to: '/batch', label: 'Batch' },
-  { to: '/screener', label: 'Screener' },
+  { to: '/journal', label: '📒 Journal' },
+  { to: '/alerts', label: '🔔 Alerts' },
+  { to: '/backtest', label: '📊 Backtest' },
   { to: '/reports', label: 'Reports' },
 ]
 
@@ -17,6 +20,13 @@ export default function TopNav() {
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const { logout } = useAuth()
+
+  const { data: regime } = useQuery({
+    queryKey: ['market-regime'],
+    queryFn: advancedApi.marketBreadth,
+    staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
+  })
 
   const handleLogout = () => {
     logout()
@@ -60,14 +70,37 @@ export default function TopNav() {
         })}
       </div>
 
-      <button
-        onClick={handleLogout}
-        className="px-3 py-1.5 text-xs font-medium rounded border transition-colors hover:bg-white/5"
-        style={{ color: '#94a3b8', borderColor: 'rgba(255,255,255,0.1)' }}
-        data-testid="logout-btn"
-      >
-        Logout
-      </button>
+      <div className="flex items-center gap-3 shrink-0">
+        {regime?.regime && regime.regime !== 'Unknown' && (
+          <div
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold"
+            style={{
+              backgroundColor: regime.color + '18',
+              border: `1px solid ${regime.color}40`,
+            }}
+            title={regime.description ?? ''}
+          >
+            <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: regime.color }} />
+            <span style={{ color: regime.color }}>{regime.regime}</span>
+            {regime.vix != null && (
+              <span style={{ color: '#475569' }}>VIX {regime.vix}</span>
+            )}
+            {regime.spy_change != null && (
+              <span style={{ color: regime.spy_change >= 0 ? '#00e676' : '#ff1744' }}>
+                SPY {regime.spy_change >= 0 ? '+' : ''}{regime.spy_change.toFixed(1)}%
+              </span>
+            )}
+          </div>
+        )}
+        <button
+          onClick={handleLogout}
+          className="px-3 py-1.5 text-xs font-medium rounded border transition-colors hover:bg-white/5"
+          style={{ color: '#94a3b8', borderColor: 'rgba(255,255,255,0.1)' }}
+          data-testid="logout-btn"
+        >
+          Logout
+        </button>
+      </div>
     </nav>
   )
 }

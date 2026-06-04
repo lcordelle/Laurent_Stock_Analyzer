@@ -7,6 +7,7 @@ import yfinance as yf
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from api.auth import verify_token
+from utils.market_breadth import get_market_regime
 
 router = APIRouter(tags=["market_pulse"])
 logger = logging.getLogger(__name__)
@@ -135,8 +136,6 @@ async def get_market_pulse(_: str = Depends(verify_token)):
         _pulse_cache_ts = time.time()
     return result
 
-
-from utils.market_breadth import get_market_regime
 
 @router.get("/market-breadth")
 async def market_breadth(_: str = Depends(verify_token)):

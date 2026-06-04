@@ -9,10 +9,8 @@ const NAV_LINKS = [
   { to: '/opportunities', label: '⚡ Opportunities' },
   { to: '/watchlist', label: '★ Watchlist' },
   { to: '/penny-stocks', label: '💎 Penny Buys' },
-  { to: '/ai-predictor', label: '🤖 AI Predictor' },
-  { to: '/journal', label: '📒 Journal' },
+  { to: '/screener', label: 'Screener' },
   { to: '/alerts', label: '🔔 Alerts' },
-  { to: '/backtest', label: '📊 Backtest' },
   { to: '/reports', label: 'Reports' },
 ]
 

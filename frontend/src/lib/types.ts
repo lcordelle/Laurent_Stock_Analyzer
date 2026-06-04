@@ -146,3 +146,26 @@ export interface AiAnalystReportResponse {
   ticker: string; provider?: string; model_name?: string
   sections: AiAnalystSections; error?: string
 }
+
+export interface VerdictSignalDetail {
+  label: string
+  score: number
+  weight: number
+}
+
+export interface VerdictResponse {
+  verdict: string
+  confidence: number
+  vf_score: number
+  signals: {
+    technical: VerdictSignalDetail
+    fundamental: VerdictSignalDetail
+    ai_outlook: VerdictSignalDetail
+    analyst: VerdictSignalDetail
+    momentum: VerdictSignalDetail
+    risk: VerdictSignalDetail
+  }
+  price_target?: number
+  stop_loss?: number
+  why: string
+}

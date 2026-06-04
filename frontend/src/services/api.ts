@@ -71,6 +71,11 @@ export const gradesApi = {
     api.get('/grades/earnings', { params: { ticker } }).then(r => r.data),
 }
 
+export const verdictApi = {
+  get: (ticker: string, period = '1y') =>
+    api.get<import('../lib/types').VerdictResponse>(`/stocks/${ticker}/verdict`, { params: { period } }).then(r => r.data),
+}
+
 export const watchlistApi = {
   signals: (tickers: string[]) =>
     api.post('/watchlist/signals', { tickers }).then(r => r.data),

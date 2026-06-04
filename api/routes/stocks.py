@@ -822,7 +822,7 @@ def _score_news_sentiment(news: list) -> tuple[int, str]:
             for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
                 try:
                     pub = datetime.strptime(pub_str, fmt)
-                    age_h = (datetime.now() - pub).total_seconds() / 3600
+                    age_h = (datetime.utcnow() - pub).total_seconds() / 3600
                     if age_h <= 24:   return 3.0
                     if age_h <= 72:   return 1.5
                     if age_h <= 168:  return 0.5

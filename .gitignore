@@ -52,6 +52,9 @@ build/
 # Data files (may contain personal analysis records)
 data/
 
+# Superpowers plugin runtime
+.superpowers/
+
 # ngrok config (contains tunnel domain)
 ngrok.yml
 

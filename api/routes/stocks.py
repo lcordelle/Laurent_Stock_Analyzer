@@ -5,7 +5,7 @@ import time
 import numpy as np
 import pandas as pd
 from typing import Any, Optional
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from api.auth import verify_token
 from api.models.requests import AnalyzeRequest, BatchRequest
@@ -35,8 +35,8 @@ class VerdictResponse(BaseModel):
     confidence: int
     vf_score: int
     signals: dict[str, VerdictSignalDetail]
-    price_target: Optional[float]
-    stop_loss: Optional[float]
+    price_target: Optional[float] = None
+    stop_loss: Optional[float] = None
     why: str
 logger = logging.getLogger(__name__)
 
@@ -807,7 +807,7 @@ def _compute_verdict(analysis: FullStockAnalysis) -> VerdictResponse:
 
     # ── Technical signal (25%) ────────────────────────────────────────────
     tech_score = sig.confidence if sig and sig.confidence is not None else 50
-    tech_signal = sig.signal or "HOLD" if sig else "HOLD"
+    tech_signal = (sig.signal or "HOLD") if sig else "HOLD"
     tech_label = (
         "Strong Bullish" if "STRONG BUY" in tech_signal else
         "Bullish"        if "BUY" in tech_signal else
@@ -938,7 +938,7 @@ def _compute_verdict(analysis: FullStockAnalysis) -> VerdictResponse:
     return VerdictResponse(
         verdict=verdict,
         confidence=confidence,
-        vf_score=fund_score,
+        vf_score=int(round(composite)),
         signals={
             "technical":   VerdictSignalDetail(label=tech_label,      score=tech_score,     weight=0.25),
             "fundamental": VerdictSignalDetail(label=fund_label,      score=fund_score,     weight=0.25),
@@ -989,6 +989,5 @@ async def get_verdict(ticker: str, period: str = "1y", _: str = Depends(verify_t
     loop = asyncio.get_event_loop()
     analysis = await loop.run_in_executor(None, _analyze_ticker, ticker.upper(), period)
     if analysis.error:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail=analysis.error)
     return _compute_verdict(analysis)

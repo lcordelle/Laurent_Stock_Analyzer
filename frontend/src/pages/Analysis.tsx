@@ -273,6 +273,7 @@ function MetricsStrip({ data }: { data: FullStockAnalysis }) {
 import EarningsPreview from '../components/stocks/EarningsPreview'
 import CatalystCalendar from '../components/stocks/CatalystCalendar'
 import ValuationTools from '../components/stocks/ValuationTools'
+import VerdictBanner from '../components/stocks/VerdictBanner'
 
 type Tab = 'fundamentals' | 'earnings' | 'news' | 'ai' | 'valuation' | 'catalysts'
 
@@ -537,17 +538,13 @@ export default function Analysis() {
         {/* ── Quick actions ────────────────────────────────────────────────── */}
         {data && !data.error && ticker && (
           <div className="flex gap-2 flex-wrap">
-            {[
-              { to: `/alerts?ticker=${ticker}`,   label: '🔔 Set Alert',  bg: '#ffab0015', border: 'rgba(255,171,0,0.25)',  color: '#ffab00' },
-              { to: `/journal?ticker=${ticker}`,  label: '📒 Log Trade',  bg: '#00e67615', border: 'rgba(0,230,118,0.25)',  color: '#00e676' },
-              { to: `/backtest?ticker=${ticker}`, label: '📊 Backtest',   bg: '#00d4ff15', border: 'rgba(0,212,255,0.25)',  color: '#00d4ff' },
-            ].map(({ to, label, bg, border, color }) => (
-              <Link key={to} to={to}
-                className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-opacity hover:opacity-80"
-                style={{ backgroundColor: bg, border: `1px solid ${border}`, color }}>
-                {label}
-              </Link>
-            ))}
+            <Link
+              to={`/alerts?ticker=${ticker}`}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-opacity hover:opacity-80"
+              style={{ backgroundColor: '#ffab0015', border: '1px solid rgba(255,171,0,0.25)', color: '#ffab00' }}
+            >
+              🔔 Set Alert
+            </Link>
           </div>
         )}
 
@@ -575,6 +572,9 @@ export default function Analysis() {
 
         {data && !data.error && (
           <div className="flex flex-col gap-4">
+
+            {/* ── Verdict banner ─────────────────────────────────────────────── */}
+            {ticker && <VerdictBanner ticker={ticker} period={period} />}
 
             {/* ── Company description ────────────────────────────────────────── */}
             {data.description && (

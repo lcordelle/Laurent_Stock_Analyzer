@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 from typing import Any, Optional
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 from api.auth import verify_token
 from api.models.requests import AnalyzeRequest, BatchRequest
 import yfinance as yf
@@ -21,6 +22,22 @@ from utils.news_market import NewsMarketData
 from utils.ratings_aggregator import RatingsAggregator
 
 router = APIRouter(tags=["stocks"])
+
+
+class VerdictSignalDetail(BaseModel):
+    label: str
+    score: int
+    weight: float
+
+
+class VerdictResponse(BaseModel):
+    verdict: str
+    confidence: int
+    vf_score: int
+    signals: dict[str, VerdictSignalDetail]
+    price_target: Optional[float]
+    stop_loss: Optional[float]
+    why: str
 logger = logging.getLogger(__name__)
 
 
@@ -780,6 +797,162 @@ def _analyze_ticker(ticker: str, period: str) -> FullStockAnalysis:
     )
 
 
+def _compute_verdict(analysis: FullStockAnalysis) -> VerdictResponse:
+    sig = analysis.trading_signals
+    score = analysis.score
+    fct = analysis.forecast
+    rat = analysis.analyst_rating
+    rsk = analysis.risk_profile
+    price = analysis.metrics.current_price if analysis.metrics else None
+
+    # ── Technical signal (25%) ────────────────────────────────────────────
+    tech_score = sig.confidence if sig and sig.confidence is not None else 50
+    tech_signal = sig.signal or "HOLD" if sig else "HOLD"
+    tech_label = (
+        "Strong Bullish" if "STRONG BUY" in tech_signal else
+        "Bullish"        if "BUY" in tech_signal else
+        "Strong Bearish" if "STRONG SELL" in tech_signal else
+        "Bearish"        if "SELL" in tech_signal else
+        "Neutral"
+    )
+
+    # ── Fundamental signal (25%) ──────────────────────────────────────────
+    fund_score = score.total if score else 50
+    fund_label = (
+        "Exceptional" if fund_score >= 80 else
+        "Strong"      if fund_score >= 65 else
+        "Moderate"    if fund_score >= 50 else
+        "Weak"
+    )
+
+    # ── AI Outlook signal (20%) ───────────────────────────────────────────
+    if fct and fct.probability is not None and fct.forecast_change_pct is not None:
+        if fct.forecast_change_pct > 0:
+            ai_score = int(min(100, 50 + fct.probability * 50))
+        else:
+            ai_score = int(max(0, 50 - fct.probability * 50))
+    else:
+        ai_score = 50
+    ai_label = (
+        "Bullish"  if ai_score >= 65 else
+        "Neutral"  if ai_score >= 45 else
+        "Bearish"
+    )
+
+    # ── Analyst signal (15%) ─────────────────────────────────────────────
+    if rat and rat.mean is not None:
+        analyst_score = int(max(0, min(100, (5 - rat.mean) / 4 * 100)))
+        if rat.target_mean and price and price > 0:
+            upside = (rat.target_mean - price) / price * 100
+            if upside > 20:   analyst_score = min(100, analyst_score + 10)
+            elif upside > 10: analyst_score = min(100, analyst_score + 5)
+    else:
+        analyst_score = 50
+    analyst_label = (
+        "Strong Buy" if analyst_score >= 80 else
+        "Buy"        if analyst_score >= 60 else
+        "Hold"       if analyst_score >= 40 else
+        "Sell"
+    )
+
+    # ── Momentum signal (10%) ─────────────────────────────────────────────
+    trend = sig.trend_strength if sig else None
+    momentum_score = (
+        85 if trend == "STRONG UPTREND" else
+        70 if trend == "UPTREND" else
+        50 if trend == "MIXED" else
+        30 if trend == "DOWNTREND" else
+        50
+    )
+    momentum_label = (
+        "Strong Uptrend" if momentum_score >= 80 else
+        "Uptrend"        if momentum_score >= 65 else
+        "Neutral"        if momentum_score >= 45 else
+        "Downtrend"
+    )
+
+    # ── Risk signal (5%) — inverted: low risk → high score ────────────────
+    if rsk and rsk.sharpe_ratio is not None:
+        risk_score = (
+            80 if rsk.sharpe_ratio >= 1.0 else
+            65 if rsk.sharpe_ratio >= 0.5 else
+            45 if rsk.sharpe_ratio >= 0.0 else
+            25
+        )
+    elif rsk and rsk.volatility is not None:
+        risk_score = int(max(0, min(100, 100 - rsk.volatility)))
+    else:
+        risk_score = 50
+    risk_label = (
+        "Low Risk"      if risk_score >= 70 else
+        "Moderate Risk" if risk_score >= 45 else
+        "High Risk"
+    )
+
+    # ── Weighted composite ────────────────────────────────────────────────
+    weights = {"technical": 0.25, "fundamental": 0.25, "ai_outlook": 0.20,
+               "analyst": 0.15, "momentum": 0.10, "risk": 0.05}
+    scores_map = {
+        "technical": tech_score, "fundamental": fund_score,
+        "ai_outlook": ai_score, "analyst": analyst_score,
+        "momentum": momentum_score, "risk": risk_score,
+    }
+    composite = sum(scores_map[k] * w for k, w in weights.items())
+
+    verdict = (
+        "STRONG BUY"  if composite >= 75 else
+        "BUY"         if composite >= 60 else
+        "HOLD"        if composite >= 45 else
+        "SELL"        if composite >= 30 else
+        "STRONG SELL"
+    )
+
+    bullish_count = sum(1 for s in scores_map.values() if s > 60)
+    confidence = int(round(bullish_count / len(scores_map) * 100))
+
+    # ── Price target + stop loss ──────────────────────────────────────────
+    price_target = None
+    if rat and rat.target_mean:
+        price_target = round(rat.target_mean, 2)
+    elif sig and sig.tp1:
+        price_target = sig.tp1
+
+    stop_loss = round(sig.stop_loss, 2) if sig and sig.stop_loss else None
+
+    # ── Why text ──────────────────────────────────────────────────────────
+    if fund_score >= 80 and tech_score >= 70:
+        why = "Elite fundamentals aligned with bullish technicals — rare high-conviction setup"
+    elif analyst_score >= 75 and fund_score >= 65:
+        why = "Analyst consensus and strong fundamentals align — meaningful upside potential"
+    elif ai_score >= 70 and tech_score >= 65:
+        why = "AI forecast and technical momentum both point higher — improving risk/reward"
+    elif risk_score >= 70 and fund_score >= 65:
+        why = "Low-volatility compounder with strong fundamentals — quality at acceptable risk"
+    elif composite >= 60:
+        why = "Multiple signals confirm bullish bias — monitor for optimal entry"
+    elif composite >= 45:
+        why = "Mixed signals — wait for a clearer technical or fundamental catalyst"
+    else:
+        why = "Bearish signal convergence across multiple dimensions — risk management priority"
+
+    return VerdictResponse(
+        verdict=verdict,
+        confidence=confidence,
+        vf_score=fund_score,
+        signals={
+            "technical":   VerdictSignalDetail(label=tech_label,      score=tech_score,     weight=0.25),
+            "fundamental": VerdictSignalDetail(label=fund_label,      score=fund_score,     weight=0.25),
+            "ai_outlook":  VerdictSignalDetail(label=ai_label,        score=ai_score,       weight=0.20),
+            "analyst":     VerdictSignalDetail(label=analyst_label,   score=analyst_score,  weight=0.15),
+            "momentum":    VerdictSignalDetail(label=momentum_label,  score=momentum_score, weight=0.10),
+            "risk":        VerdictSignalDetail(label=risk_label,      score=risk_score,     weight=0.05),
+        },
+        price_target=price_target,
+        stop_loss=stop_loss,
+        why=why,
+    )
+
+
 @router.post("/analyze", response_model=FullStockAnalysis)
 async def analyze(body: AnalyzeRequest, _: str = Depends(verify_token)):
     loop = asyncio.get_event_loop()
@@ -809,3 +982,13 @@ async def batch(body: BatchRequest, _: str = Depends(verify_token)):
             results.append(outcome)
 
     return BatchAnalysisResponse(results=results, total=len(results), failed=failed)
+
+
+@router.get("/stocks/{ticker}/verdict", response_model=VerdictResponse)
+async def get_verdict(ticker: str, period: str = "1y", _: str = Depends(verify_token)):
+    loop = asyncio.get_event_loop()
+    analysis = await loop.run_in_executor(None, _analyze_ticker, ticker.upper(), period)
+    if analysis.error:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail=analysis.error)
+    return _compute_verdict(analysis)

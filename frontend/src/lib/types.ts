@@ -171,3 +171,37 @@ export interface VerdictResponse {
   stop_loss?: number
   why: string
 }
+
+export interface RadarStock {
+  ticker: string
+  name?: string
+  domain?: string
+  price?: number
+  verdict: string
+  composite: number
+  confidence: number
+  signals: {
+    technical: VerdictSignalDetail
+    fundamental: VerdictSignalDetail
+    ai_outlook: VerdictSignalDetail
+    analyst: VerdictSignalDetail
+    momentum: VerdictSignalDetail
+    news_sentiment: VerdictSignalDetail
+    earnings_quality: VerdictSignalDetail
+    risk: VerdictSignalDetail
+  }
+  why: string
+  price_target?: number
+  stop_loss?: number
+  analyst_upside?: number
+  risk_reward?: number
+}
+
+export interface RadarResponse {
+  mode: string
+  stocks: RadarStock[]
+  total_scanned: number
+  shortlist_count: number
+  cached_at?: number
+  scan_duration_seconds?: number
+}

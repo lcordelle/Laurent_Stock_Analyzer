@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { VerdictResponse } from '../lib/types'
+import type { VerdictResponse, RadarResponse } from '../lib/types'
 
 const api = axios.create({ baseURL: '/api' })
 
@@ -34,6 +34,13 @@ export const stockApi = {
 export const opportunitiesApi = {
   get: () => api.get('/opportunities').then(r => r.data),
   refresh: () => api.post('/opportunities/refresh').then(r => r.data),
+}
+
+export const radarApi = {
+  getUniverse: () => api.get<RadarResponse>('/radar').then(r => r.data),
+  refresh: () => api.post<RadarResponse>('/radar/refresh').then(r => r.data),
+  runCustom: (tickers: string[]) =>
+    api.post<RadarResponse>('/radar/custom', { tickers }).then(r => r.data),
 }
 
 export const marketPulseApi = {

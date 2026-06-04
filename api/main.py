@@ -30,14 +30,16 @@ async def _scan_loop():
     else:
         try:
             await opportunities._run_scan()
+            await opportunities._two_pass_scan()
         except Exception as e:
-            logger.error("Background opportunities scan failed: %s", e)
+            logger.error("Background scan failed: %s", e)
     while True:
         await asyncio.sleep(opportunities.CACHE_TTL)
         try:
             await opportunities._run_scan()
+            await opportunities._two_pass_scan()
         except Exception as e:
-            logger.error("Background opportunities scan failed: %s", e)
+            logger.error("Background scan failed: %s", e)
 
 
 @asynccontextmanager

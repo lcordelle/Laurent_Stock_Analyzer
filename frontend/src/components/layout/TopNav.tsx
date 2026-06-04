@@ -6,10 +6,9 @@ import { marketPulseApi } from '../../services/api'
 const NAV_LINKS = [
   { to: '/', label: 'Dashboard' },
   { to: '/analysis', label: 'Analysis' },
-  { to: '/opportunities', label: '⚡ Opportunities' },
+  { to: '/radar', label: '⚡ Radar' },
   { to: '/watchlist', label: '★ Watchlist' },
   { to: '/penny-stocks', label: '💎 Penny Buys' },
-  { to: '/screener', label: 'Screener' },
   { to: '/alerts', label: '🔔 Alerts' },
   { to: '/reports', label: 'Reports' },
 ]

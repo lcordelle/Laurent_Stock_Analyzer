@@ -5,9 +5,8 @@ import TopNav from './components/layout/TopNav'
 import Login from './pages/Login'
 import Home from './pages/Home'
 import Analysis from './pages/Analysis'
-import Screener from './pages/Screener'
+import Radar from './pages/Radar'
 import Reports from './pages/Reports'
-import Opportunities from './pages/Opportunities'
 import Watchlist from './pages/Watchlist'
 import PennyStocks from './pages/PennyStocks'
 import Alerts from './pages/Alerts'
@@ -32,9 +31,10 @@ export default function App() {
               <Routes>
                 <Route path="/" element={<Home />} />
                 <Route path="/analysis" element={<Analysis />} />
-                <Route path="/screener" element={<Screener />} />
+                <Route path="/radar" element={<Radar />} />
+                <Route path="/screener" element={<Navigate to="/radar" replace />} />
+                <Route path="/opportunities" element={<Navigate to="/radar" replace />} />
                 <Route path="/reports" element={<Reports />} />
-                <Route path="/opportunities" element={<Opportunities />} />
                 <Route path="/watchlist" element={<Watchlist />} />
                 <Route path="/penny-stocks" element={<PennyStocks />} />
                 <Route path="/alerts" element={<Alerts />} />

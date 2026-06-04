@@ -920,8 +920,8 @@ def _compute_verdict(analysis: FullStockAnalysis) -> VerdictResponse:
             tech_score = min(65, tech_score)
     tech_label = (
         "Strong Bullish" if "STRONG BUY"  in (sig.signal or "") else
-        "Bullish"        if "BUY"         in (sig.signal or "") else
         "Strong Bearish" if "STRONG SELL" in (sig.signal or "") else
+        "Bullish"        if "BUY"         in (sig.signal or "") else
         "Bearish"        if "SELL"        in (sig.signal or "") else
         "Neutral"
     )
@@ -1110,7 +1110,7 @@ def _compute_verdict(analysis: FullStockAnalysis) -> VerdictResponse:
         tail = "risk management priority"
 
     if facts:
-        why = f"{', '.join(facts[:2])} — {tail}"
+        why = f"{', '.join(facts)} — {tail}"
     elif composite >= 60:
         why = "Multiple signals confirm bullish bias — monitor for optimal entry"
     elif composite >= 45:

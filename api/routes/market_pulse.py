@@ -134,3 +134,10 @@ async def get_market_pulse(_: str = Depends(verify_token)):
         _pulse_cache = result
         _pulse_cache_ts = time.time()
     return result
+
+
+from utils.market_breadth import get_market_regime
+
+@router.get("/market-breadth")
+async def market_breadth(_: str = Depends(verify_token)):
+    return get_market_regime()

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { advancedApi } from '../services/api'
+import { marketPulseApi } from '../services/api'
 import { Loader2, Target, Shield, Zap, TrendingUp, TrendingDown, BarChart2, ChevronUp, ChevronDown, RefreshCw, BookmarkPlus, Check, Star } from 'lucide-react'
 import { opportunitiesApi } from '../services/api'
 import { fmt, scoreColor, changeColor } from '../lib/formatters'
@@ -989,7 +989,7 @@ export default function Opportunities() {
 
   const { data: regime } = useQuery({
     queryKey: ['market-regime'],
-    queryFn: advancedApi.marketBreadth,
+    queryFn: marketPulseApi.marketBreadth,
     staleTime: 5 * 60_000,
   })
 

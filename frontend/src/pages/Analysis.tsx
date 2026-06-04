@@ -2,7 +2,7 @@ import { useState, useEffect, type FormEvent } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Loader2, TrendingUp, TrendingDown, Bookmark, BookmarkCheck } from 'lucide-react'
-import { stockApi, advancedApi } from '../services/api'
+import { stockApi } from '../services/api'
 import { addRecentTicker } from './Home'
 import { addToWatchlist, removeFromWatchlist, isInWatchlist } from '../lib/watchlist'
 import type { FullStockAnalysis } from '../lib/types'
@@ -274,7 +274,7 @@ import EarningsPreview from '../components/stocks/EarningsPreview'
 import CatalystCalendar from '../components/stocks/CatalystCalendar'
 import ValuationTools from '../components/stocks/ValuationTools'
 
-type Tab = 'fundamentals' | 'earnings' | 'news' | 'ai' | 'valuation' | 'catalysts' | 'optpatterns' | 'smartmoney'
+type Tab = 'fundamentals' | 'earnings' | 'news' | 'ai' | 'valuation' | 'catalysts'
 
 function DeepTabs({ data, period, onPeriodChange }: {
   data: FullStockAnalysis; period: string; onPeriodChange: (p: string) => void
@@ -289,40 +289,8 @@ function DeepTabs({ data, period, onPeriodChange }: {
     { id: 'catalysts',    label: 'Catalysts' },
     { id: 'news',         label: 'News & Analyst' },
     { id: 'ai',           label: 'AI Research' },
-    { id: 'optpatterns',  label: '🎯 Options & Patterns' },
-    { id: 'smartmoney',   label: '🏦 Smart Money' },
   ]
 
-  const { data: optData, isFetching: optFetching } = useQuery({
-    queryKey: ['options-flow', data.ticker],
-    queryFn: () => advancedApi.options(data.ticker),
-    enabled: tab === 'optpatterns',
-    staleTime: 5 * 60_000,
-  })
-  const { data: patData, isFetching: patFetching } = useQuery({
-    queryKey: ['patterns', data.ticker],
-    queryFn: () => advancedApi.patterns(data.ticker),
-    enabled: tab === 'optpatterns',
-    staleTime: 5 * 60_000,
-  })
-  const { data: shortData, isFetching: shortFetching } = useQuery({
-    queryKey: ['short', data.ticker],
-    queryFn: () => advancedApi.shortInterest(data.ticker),
-    enabled: tab === 'smartmoney',
-    staleTime: 5 * 60_000,
-  })
-  const { data: insiderData, isFetching: insiderFetching } = useQuery({
-    queryKey: ['insider', data.ticker],
-    queryFn: () => advancedApi.insider(data.ticker),
-    enabled: tab === 'smartmoney',
-    staleTime: 5 * 60_000,
-  })
-  const { data: instData, isFetching: instFetching } = useQuery({
-    queryKey: ['institutional', data.ticker],
-    queryFn: () => advancedApi.institutional(data.ticker),
-    enabled: tab === 'smartmoney',
-    staleTime: 5 * 60_000,
-  })
   return (
     <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
       <div className="flex border-b overflow-x-auto" style={{ backgroundColor: '#111827', borderColor: 'rgba(255,255,255,0.06)' }}>
@@ -403,210 +371,6 @@ function DeepTabs({ data, period, onPeriodChange }: {
             <AiResearch ticker={data.ticker} data={data} />
           </>
         )}
-
-        {tab === 'optpatterns' && (
-          <div className="flex flex-col gap-6">
-            {/* ── Options Flow ─────────────────────────────────────────────── */}
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: '#475569' }}>Options Flow — Unusual Activity</p>
-              {optFetching && <p className="text-sm" style={{ color: '#475569' }}>Loading options chain…</p>}
-              {optData?.summary && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-                  {[
-                    { label: 'Call OI',       value: (optData.summary.total_call_oi    || 0).toLocaleString() },
-                    { label: 'Put OI',        value: (optData.summary.total_put_oi     || 0).toLocaleString() },
-                    { label: 'P/C OI Ratio',  value: (optData.summary.pc_ratio         || 0).toFixed(2) },
-                    { label: 'P/C Vol Ratio', value: (optData.summary.pc_volume_ratio  || 0).toFixed(2) },
-                  ].map(m => (
-                    <div key={m.label} className="rounded-xl p-4" style={{ backgroundColor: '#0a0e1a', border: '1px solid rgba(255,255,255,0.06)' }}>
-                      <p className="text-xs mb-1" style={{ color: '#475569' }}>{m.label}</p>
-                      <p className="text-xl font-bold" style={{ color: '#e2e8f0' }}>{m.value}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {optData?.sentiment_label && (
-                <p className="text-xs mb-3 font-semibold" style={{ color: optData.sentiment_color || '#00d4ff' }}>
-                  Options Sentiment: {optData.sentiment_label}
-                </p>
-              )}
-              {optData?.unusual?.length > 0 ? (
-                <div className="overflow-x-auto rounded-xl" style={{ border: '1px solid rgba(255,255,255,0.06)' }}>
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr style={{ backgroundColor: '#1e2535' }}>
-                        {['Expiry','Type','Strike','Volume','OI','Vol/OI','IV %','Last $'].map(h => (
-                          <th key={h} className="px-3 py-2 text-left font-semibold" style={{ color: '#475569' }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {optData.unusual.map((u: any, i: number) => (
-                        <tr key={i} style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-                          <td className="px-3 py-2" style={{ color: '#94a3b8' }}>{u.expiry}</td>
-                          <td className="px-3 py-2">
-                            <span className="px-1.5 rounded text-xs font-semibold"
-                              style={{ backgroundColor: u.type === 'call' ? '#00e67622' : '#ff174422', color: u.type === 'call' ? '#00e676' : '#ff1744' }}>
-                              {u.type?.toUpperCase()}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2 font-semibold" style={{ color: '#e2e8f0' }}>${u.strike?.toFixed(1)}</td>
-                          <td className="px-3 py-2 font-semibold" style={{ color: '#00d4ff' }}>{u.volume?.toLocaleString()}</td>
-                          <td className="px-3 py-2" style={{ color: '#94a3b8' }}>{u.oi?.toLocaleString()}</td>
-                          <td className="px-3 py-2" style={{ color: '#ffab00' }}>{u.vol_oi_ratio}x</td>
-                          <td className="px-3 py-2" style={{ color: '#94a3b8' }}>{u.iv ? `${u.iv}%` : '—'}</td>
-                          <td className="px-3 py-2" style={{ color: '#e2e8f0' }}>${u.last?.toFixed(2)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (!optFetching && optData && (
-                <p className="text-sm" style={{ color: '#475569' }}>No unusual options activity detected in the next 4 expiries.</p>
-              ))}
-            </div>
-
-            {/* ── Candlestick Patterns ──────────────────────────────────────── */}
-            <div className="pt-5" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-              <p className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: '#475569' }}>Candlestick Patterns — Last 20 Candles</p>
-              {patFetching && <p className="text-sm" style={{ color: '#475569' }}>Detecting patterns…</p>}
-              {patData?.patterns?.length > 0 ? (
-                <div className="flex flex-col gap-2">
-                  {[...patData.patterns].reverse().map((p: any, i: number) => (
-                    <div key={i} className="flex items-center justify-between px-4 py-3 rounded-xl"
-                      style={{ backgroundColor: '#0a0e1a', border: '1px solid rgba(255,255,255,0.06)' }}>
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs px-2 py-0.5 rounded font-semibold"
-                          style={{
-                            backgroundColor: p.direction === 'bullish' ? '#00e67622' : p.direction === 'bearish' ? '#ff174422' : '#ffab0022',
-                            color: p.direction === 'bullish' ? '#00e676' : p.direction === 'bearish' ? '#ff1744' : '#ffab00',
-                          }}>
-                          {p.direction?.toUpperCase()}
-                        </span>
-                        <span className="text-sm font-semibold" style={{ color: '#e2e8f0' }}>{p.pattern}</span>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <span className="text-xs" style={{ color: '#475569' }}>{p.date}</span>
-                        <span className="text-xs font-semibold" style={{ color: '#00d4ff' }}>{p.confidence}% conf.</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (!patFetching && patData && (
-                <p className="text-sm" style={{ color: '#475569' }}>No significant patterns detected in recent candles.</p>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {tab === 'smartmoney' && (
-          <div className="flex flex-col gap-5">
-            {/* Short Interest */}
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: '#475569' }}>Short Interest</p>
-              {shortFetching && <p className="text-sm" style={{ color: '#475569' }}>Loading short interest…</p>}
-              {shortData?.available ? (
-                <>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
-                    {[
-                      { label: 'Short % Float',   value: `${(shortData.short_percent_of_float || 0).toFixed(1)}%` },
-                      { label: 'Days to Cover',   value: (shortData.short_ratio || 0).toFixed(1) },
-                      { label: 'Shares Short',    value: (shortData.shares_short || 0).toLocaleString() },
-                      { label: 'MoM Change',      value: `${(shortData.short_percent_change || 0) > 0 ? '+' : ''}${(shortData.short_percent_change || 0).toFixed(1)}%` },
-                    ].map(m => (
-                      <div key={m.label} className="rounded-xl p-4" style={{ backgroundColor: '#0a0e1a', border: '1px solid rgba(255,255,255,0.06)' }}>
-                        <p className="text-xs mb-1" style={{ color: '#475569' }}>{m.label}</p>
-                        <p className="text-xl font-bold" style={{ color: '#e2e8f0' }}>{m.value}</p>
-                      </div>
-                    ))}
-                  </div>
-                  {shortData.squeeze_risk && (() => {
-                    const rc = shortData.squeeze_risk === 'High' ? '#ff1744' : shortData.squeeze_risk === 'Moderate' ? '#ffab00' : '#00e676'
-                    return (
-                      <div className="p-3 rounded-lg" style={{ backgroundColor: rc + '18', border: `1px solid ${rc}` }}>
-                        <span className="text-sm font-semibold" style={{ color: rc }}>Squeeze Risk: {shortData.squeeze_risk}</span>
-                        <p className="text-xs mt-1" style={{ color: '#94a3b8' }}>High = short% &gt; 20% AND days-to-cover &gt; 5</p>
-                      </div>
-                    )
-                  })()}
-                </>
-              ) : (!shortFetching && shortData && (
-                <p className="text-sm" style={{ color: '#475569' }}>Short interest data not available.</p>
-              ))}
-            </div>
-
-            {/* Insider Transactions */}
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: '#475569' }}>Insider Transactions</p>
-              {insiderFetching && <p className="text-sm" style={{ color: '#475569' }}>Loading insider data…</p>}
-              {insiderData?.cluster_buy && (
-                <div className="mb-3 p-3 rounded-lg" style={{ backgroundColor: '#00e67622', border: '1px solid #00e676' }}>
-                  <span className="text-sm font-semibold" style={{ color: '#00e676' }}>
-                    Cluster Buy Signal — {insiderData.buy_count} insider purchases detected
-                  </span>
-                </div>
-              )}
-              {insiderData?.transactions?.length > 0 ? (
-                <div className="overflow-x-auto rounded-xl" style={{ border: '1px solid rgba(255,255,255,0.06)' }}>
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr style={{ backgroundColor: '#1e2535' }}>
-                        {Object.keys(insiderData.transactions[0]).slice(0, 6).map((h: string) => (
-                          <th key={h} className="px-3 py-2 text-left font-semibold" style={{ color: '#475569' }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {insiderData.transactions.slice(0, 10).map((r: any, i: number) => (
-                        <tr key={i} style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-                          {Object.keys(insiderData.transactions[0]).slice(0, 6).map((k: string) => (
-                            <td key={k} className="px-3 py-2" style={{ color: '#94a3b8' }}>
-                              {r[k] != null ? String(r[k]) : '—'}
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (!insiderFetching && insiderData && (
-                <p className="text-sm" style={{ color: '#475569' }}>No recent insider transaction data.</p>
-              ))}
-            </div>
-
-            {/* Institutional 13F Holdings */}
-            <div className="pt-5" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-              <p className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: '#475569' }}>Institutional Holdings (13F)</p>
-              {instFetching && <p className="text-sm" style={{ color: '#475569' }}>Loading 13F data…</p>}
-              {instData?.available && instData.holders?.length > 0 ? (
-                <div className="overflow-x-auto rounded-xl" style={{ border: '1px solid rgba(255,255,255,0.06)' }}>
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr style={{ backgroundColor: '#1e2535' }}>
-                        {Object.keys(instData.holders[0]).slice(0, 5).map((h: string) => (
-                          <th key={h} className="px-3 py-2 text-left font-semibold" style={{ color: '#475569' }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {instData.holders.map((r: any, i: number) => (
-                        <tr key={i} style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-                          {Object.keys(instData.holders[0]).slice(0, 5).map((k: string) => (
-                            <td key={k} className="px-3 py-2" style={{ color: '#94a3b8' }}>
-                              {r[k] != null ? String(r[k]) : '—'}
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (!instFetching && instData && (
-                <p className="text-sm" style={{ color: '#475569' }}>Institutional holdings data not available.</p>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   )
@@ -626,13 +390,6 @@ export default function Analysis() {
     enabled: !!ticker,
     staleTime: 5 * 60_000,
     retry: 1,
-  })
-
-  const { data: chartPatterns } = useQuery({
-    queryKey: ['patterns', ticker],
-    queryFn: () => advancedApi.patterns(ticker),
-    enabled: !!ticker && !!data && !data.error,
-    staleTime: 5 * 60_000,
   })
 
   useEffect(() => {
@@ -1069,7 +826,6 @@ export default function Analysis() {
                     tradingSignals={data.trading_signals}
                     earningsDates={data.earnings_dates}
                     relativeStrength={data.relative_strength}
-                    patterns={chartPatterns?.patterns}
                     period={period}
                     onPeriodChange={setPeriod}
                   />

@@ -1,7 +1,7 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../../hooks/useAuth'
-import { advancedApi } from '../../services/api'
+import { marketPulseApi } from '../../services/api'
 
 const NAV_LINKS = [
   { to: '/', label: 'Dashboard' },
@@ -21,7 +21,7 @@ export default function TopNav() {
 
   const { data: regime } = useQuery({
     queryKey: ['market-regime'],
-    queryFn: advancedApi.marketBreadth,
+    queryFn: marketPulseApi.marketBreadth,
     staleTime: 5 * 60_000,
     refetchInterval: 5 * 60_000,
   })

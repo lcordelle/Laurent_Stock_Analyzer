@@ -975,7 +975,7 @@ def _compute_verdict(analysis: FullStockAnalysis) -> VerdictResponse:
     # ── Analyst (10%) ────────────────────────────────────────────────────────
     if rat and rat.mean is not None:
         analyst_score = int(max(0, min(100, (5 - rat.mean) / 4 * 100)))
-        if rat.target_mean and price and price > 0:
+        if rat.target_mean is not None and price and price > 0:
             upside = (rat.target_mean - price) / price * 100
             if upside > 20:   analyst_score = min(100, analyst_score + 10)
             elif upside > 10: analyst_score = min(100, analyst_score + 5)
@@ -1066,8 +1066,7 @@ def _compute_verdict(analysis: FullStockAnalysis) -> VerdictResponse:
         "STRONG SELL"
     )
 
-    bullish_count = sum(1 for s in scores_map.values() if s > 60)
-    confidence = int(round(bullish_count / len(scores_map) * 100))
+    confidence = int(round(composite))
 
     # ── Price target + stop loss ─────────────────────────────────────────────
     price_target = None
@@ -1097,7 +1096,7 @@ def _compute_verdict(analysis: FullStockAnalysis) -> VerdictResponse:
     elif news_score <= 30:
         facts.append("negative news flow")
 
-    if rat and rat.target_mean and price and price > 0:
+    if rat and rat.target_mean is not None and price and price > 0:
         upside = (rat.target_mean - price) / price * 100
         if upside > 15:
             facts.append(f"{upside:.0f}% analyst upside")

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional
 import yfinance as yf
 import pandas as pd
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from api.auth import verify_token
 from api.routes.stocks import _compute_trading_signals, _analyze_ticker
@@ -61,9 +61,9 @@ _cache_ts: float = 0.0
 
 _OPPS_DISK_PATH = Path.home() / '.cache' / 'stock_analyzer' / 'opportunities_cache.json'
 
-RADAR_CACHE_TTL = 30 * 60  # 30 minutes
 _radar_cache: Optional[list] = None  # list[RadarStock] serialised as dicts
 _radar_cache_ts: float = 0.0
+_radar_scan_running: bool = False
 
 _RADAR_DISK_PATH = Path.home() / '.cache' / 'stock_analyzer' / 'radar_cache.json'
 
@@ -717,7 +717,7 @@ class MarketOpportunitiesResponse(BaseModel):
 async def _full_scan_ticker(ticker: str, domain: Optional[str] = None) -> Optional[RadarStock]:
     """Run full _analyze_ticker + _compute_verdict for a single ticker. Returns RadarStock or None on error."""
     try:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         analysis = await loop.run_in_executor(None, _analyze_ticker, ticker, "1y")
         if analysis.error:
             return None
@@ -752,56 +752,62 @@ async def _full_scan_ticker(ticker: str, domain: Optional[str] = None) -> Option
 
 async def _two_pass_scan() -> list:
     """Two-pass Radar scan: quick scan top 50 → full verdict on each. Returns list of RadarStock dicts."""
-    global _radar_cache, _radar_cache_ts
-    t_start = time.time()
-
-    # Pass 1: ensure opportunities quick scan is done
-    if _cache is None:
-        await _run_scan()
-
-    # Build ticker→domain map from full universe
-    ticker_domain: dict[str, str] = {}
-    for domain, tickers in SCAN_UNIVERSE.items():
-        for t in tickers:
-            if t not in ticker_domain:
-                ticker_domain[t] = domain
-
-    # Take top 50 from quick scan by combined_score
-    all_ideas = _cache.get("all_ideas", []) if _cache else []
-    top_50 = sorted(all_ideas, key=lambda x: x.get("combined_score", 0), reverse=True)[:50]
-    top_tickers = [(s["ticker"], ticker_domain.get(s["ticker"])) for s in top_50]
-
-    logger.info("Radar pass 2: running full verdict on %d stocks", len(top_tickers))
-
-    async def fetch_full(ticker: str, domain: Optional[str]) -> Optional[RadarStock]:
-        async with _SEM:
-            await asyncio.sleep(0.3)
-            return await _full_scan_ticker(ticker, domain)
-
-    results = await asyncio.gather(*[fetch_full(t, d) for t, d in top_tickers], return_exceptions=True)
-    stocks = [r for r in results if isinstance(r, RadarStock)]
-    stocks.sort(key=lambda s: s.composite, reverse=True)
-
-    duration = round(time.time() - t_start, 1)
-    logger.info("Radar scan complete — %d stocks ranked in %.1fs", len(stocks), duration)
-
-    stocks_dicts = [s.model_dump() for s in stocks]
-
-    if len(stocks) < 5 and _radar_cache is not None and len(_radar_cache) > 0:
-        logger.warning("Radar scan yielded only %d results (rate limited?), keeping cache", len(stocks))
-        return _radar_cache
-
-    _radar_cache = stocks_dicts
-    _radar_cache_ts = time.time()
+    global _radar_cache, _radar_cache_ts, _radar_scan_running
+    if _radar_scan_running:
+        return _radar_cache or []
+    _radar_scan_running = True
     try:
-        _RADAR_DISK_PATH.parent.mkdir(parents=True, exist_ok=True)
-        _RADAR_DISK_PATH.write_text(json.dumps(
-            {"stocks": stocks_dicts, "cached_at": _radar_cache_ts}, default=str
-        ))
-    except Exception as e:
-        logger.warning("Failed to persist radar cache to disk: %s", e)
+        t_start = time.time()
 
-    return stocks_dicts
+        # Pass 1: ensure opportunities quick scan is done
+        if _cache is None:
+            await _run_scan()
+
+        # Build ticker→domain map from full universe
+        ticker_domain: dict[str, str] = {}
+        for domain, tickers in SCAN_UNIVERSE.items():
+            for t in tickers:
+                if t not in ticker_domain:
+                    ticker_domain[t] = domain
+
+        # Take top 50 from quick scan by combined_score
+        all_ideas = _cache.get("all_ideas", []) if _cache else []
+        top_50 = sorted(all_ideas, key=lambda x: x.get("combined_score", 0), reverse=True)[:50]
+        top_tickers = [(s["ticker"], ticker_domain.get(s["ticker"])) for s in top_50]
+
+        logger.info("Radar pass 2: running full verdict on %d stocks", len(top_tickers))
+
+        async def fetch_full(ticker: str, domain: Optional[str]) -> Optional[RadarStock]:
+            async with _SEM:
+                await asyncio.sleep(0.3)
+                return await _full_scan_ticker(ticker, domain)
+
+        results = await asyncio.gather(*[fetch_full(t, d) for t, d in top_tickers], return_exceptions=True)
+        stocks = [r for r in results if isinstance(r, RadarStock)]
+        stocks.sort(key=lambda s: s.composite, reverse=True)
+
+        duration = round(time.time() - t_start, 1)
+        logger.info("Radar scan complete — %d stocks ranked in %.1fs", len(stocks), duration)
+
+        stocks_dicts = [s.model_dump() for s in stocks]
+
+        if len(stocks) < 5 and _radar_cache is not None and len(_radar_cache) > 0:
+            logger.warning("Radar scan yielded only %d results (rate limited?), keeping cache", len(stocks))
+            return _radar_cache
+
+        _radar_cache = stocks_dicts
+        _radar_cache_ts = time.time()
+        try:
+            _RADAR_DISK_PATH.parent.mkdir(parents=True, exist_ok=True)
+            _RADAR_DISK_PATH.write_text(json.dumps(
+                {"stocks": stocks_dicts, "cached_at": _radar_cache_ts}, default=str
+            ))
+        except Exception as e:
+            logger.warning("Failed to persist radar cache to disk: %s", e)
+
+        return stocks_dicts
+    finally:
+        _radar_scan_running = False
 
 
 async def _run_scan() -> dict:
@@ -921,7 +927,6 @@ async def get_opportunities(_: str = Depends(verify_token)):
             if _cache is not None:
                 break
     if _cache is None:
-        from fastapi import HTTPException
         raise HTTPException(503, detail="Scan still warming, please retry in a few seconds")
     logger.debug("Opportunities served from cache (age %.0fs)", time.time() - _cache_ts)
     return _payload_to_response(_cache)
@@ -942,12 +947,8 @@ async def refresh_opportunities(_: str = Depends(verify_token)):
 @router.get("/radar", response_model=RadarResponse)
 async def get_radar(_: str = Depends(verify_token)):
     if _radar_cache is None:
-        for _ in range(120):
-            await asyncio.sleep(0.5)
-            if _radar_cache is not None:
-                break
+        await _two_pass_scan()
     if _radar_cache is None:
-        from fastapi import HTTPException
         raise HTTPException(503, detail="Radar scan still warming, please retry in a few seconds")
     logger.debug("Radar served from cache (age %.0fs)", time.time() - _radar_cache_ts)
     stocks = [RadarStock(**s) for s in _radar_cache]
@@ -974,7 +975,6 @@ async def refresh_radar(_: str = Depends(verify_token)):
             shortlist_count=len(stocks),
             cached_at=_radar_cache_ts,
         )
-    from fastapi import HTTPException
     raise HTTPException(503, detail="Radar scan warming, retry in a few seconds")
 
 
@@ -986,7 +986,6 @@ class CustomRadarRequest(BaseModel):
 async def custom_radar(body: CustomRadarRequest, _: str = Depends(verify_token)):
     tickers = list(dict.fromkeys(t.upper().strip() for t in body.tickers if t.strip()))[:20]
     if not tickers:
-        from fastapi import HTTPException
         raise HTTPException(400, detail="No valid tickers provided")
 
     t_start = time.time()

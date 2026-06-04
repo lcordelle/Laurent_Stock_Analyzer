@@ -55,7 +55,7 @@ function VerdictSkeleton() {
     >
       <div className="h-8 w-48 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }} />
       <div className="mt-3 flex gap-3">
-        {Array.from({ length: 6 }).map((_, i) => (
+        {Array.from({ length: 8 }).map((_, i) => (
           <div key={i} className="h-7 w-24 rounded-lg" style={{ backgroundColor: 'rgba(255,255,255,0.04)' }} />
         ))}
       </div>
@@ -95,7 +95,7 @@ export default function VerdictBanner({ ticker, period }: { ticker: string; peri
               {data.verdict}
             </div>
             <div className="text-xs mt-1" style={{ color: '#64748b' }}>
-              {data.confidence}% confidence · {Object.values(data.signals).filter(s => s.score > 60).length} of 6 signals bullish
+              {data.confidence}% confidence · {Object.values(data.signals).filter(s => s.score > 60).length} of 8 signals bullish
             </div>
           </div>
 

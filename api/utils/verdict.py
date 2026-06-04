@@ -1,5 +1,4 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
 from api.models.responses import FullStockAnalysis, VerdictSignalDetail, VerdictResponse
 
 _NEWS_BULLISH_STRONG = {

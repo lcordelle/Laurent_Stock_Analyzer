@@ -16,8 +16,7 @@ from api.models.responses import (
     ShortInterestData, EarningsDate, RiskProfileData,
     VerdictSignalDetail, VerdictResponse,
 )
-from api.utils.verdict import _compute_verdict, _score_news_sentiment, _score_earnings_quality
-from api.utils.verdict import _NEWS_BULLISH_STRONG, _NEWS_BULLISH_MILD, _NEWS_BEARISH_STRONG, _NEWS_BEARISH_MILD
+from api.utils.verdict import _compute_verdict
 from utils.risk_analysis import RiskAnalyzer
 from utils.stock_analyzer import StockAnalyzer
 from utils.news_market import NewsMarketData

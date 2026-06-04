@@ -250,3 +250,19 @@ class AiAnalystReportResponse(BaseModel):
     model_name: Optional[str] = None
     sections: AiAnalystSections = AiAnalystSections()
     error: Optional[str] = None
+
+
+class VerdictSignalDetail(BaseModel):
+    label: str
+    score: int
+    weight: float
+
+
+class VerdictResponse(BaseModel):
+    verdict: str
+    confidence: int
+    vf_score: int
+    signals: dict[str, VerdictSignalDetail]
+    price_target: Optional[float] = None
+    stop_loss: Optional[float] = None
+    why: str

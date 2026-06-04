@@ -163,6 +163,8 @@ export interface VerdictResponse {
     ai_outlook: VerdictSignalDetail
     analyst: VerdictSignalDetail
     momentum: VerdictSignalDetail
+    news_sentiment: VerdictSignalDetail
+    earnings_quality: VerdictSignalDetail
     risk: VerdictSignalDetail
   }
   price_target?: number

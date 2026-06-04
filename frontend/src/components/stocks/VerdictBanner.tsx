@@ -10,7 +10,12 @@ function verdictColor(verdict: string): string {
 }
 
 function signalKey(key: string): string {
-  return key === 'ai_outlook' ? 'AI Outlook' : key.charAt(0).toUpperCase() + key.slice(1)
+  const MAP: Record<string, string> = {
+    ai_outlook: 'AI Outlook',
+    news_sentiment: 'News',
+    earnings_quality: 'Earnings',
+  }
+  return MAP[key] ?? key.charAt(0).toUpperCase() + key.slice(1)
 }
 
 function SignalPill({ name, detail }: { name: string; detail: VerdictResponse['signals']['technical'] }) {

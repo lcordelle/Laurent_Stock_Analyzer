@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from api.routes import auth, stocks, screener, portfolio, reports, opportunities, market_pulse, ai_research, watchlist, penny_stocks, ai_predictor, grades, advanced, journal, alerts_route, backtest_route
+from api.routes import auth, stocks, screener, portfolio, reports, opportunities, market_pulse, ai_research, watchlist, penny_stocks, grades, alerts_route
 
 _DIST = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend", "dist")
 
@@ -73,12 +73,8 @@ app.include_router(market_pulse.router, prefix="/api")
 app.include_router(ai_research.router, prefix="/api")
 app.include_router(watchlist.router, prefix="/api")
 app.include_router(penny_stocks.router, prefix="/api")
-app.include_router(ai_predictor.router, prefix="/api")
 app.include_router(grades.router, prefix="/api")
-app.include_router(advanced.router, prefix="/api")
-app.include_router(journal.router, prefix="/api")
 app.include_router(alerts_route.router, prefix="/api")
-app.include_router(backtest_route.router, prefix="/api")
 
 
 @app.get("/api/health")

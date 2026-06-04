@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
-  Search, BarChart2, Layers, Filter, Zap, Target,
+  Search, BarChart2, Filter, Zap, Target,
   TrendingUp, TrendingDown, Briefcase, FileText, Clock, Activity
 } from 'lucide-react'
 import { marketPulseApi, opportunitiesApi } from '../services/api'
@@ -170,7 +170,6 @@ function TopPickMini({ stock, rank }: { stock: ScannedStock; rank: number }) {
 
 const NAV_SHORTCUTS = [
   { icon: BarChart2, label: 'Deep Analysis', sub: 'Single stock deep dive', to: '/analysis', color: '#00d4ff' },
-  { icon: Layers,    label: 'Batch Compare', sub: 'Up to 10 stocks side-by-side', to: '/batch', color: '#00e676' },
   { icon: Filter,    label: 'Screener',      sub: 'Filter by fundamentals', to: '/screener', color: '#ffab00' },
   { icon: Briefcase, label: 'Portfolio',     sub: 'Holdings analysis + signals', to: '/screener', color: '#a78bfa' },
   { icon: Zap,       label: 'Opportunities', sub: 'Live market intelligence', to: '/opportunities', color: '#ffd700' },

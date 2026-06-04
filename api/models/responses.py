@@ -266,3 +266,28 @@ class VerdictResponse(BaseModel):
     price_target: Optional[float] = None
     stop_loss: Optional[float] = None
     why: str
+
+
+class RadarStock(BaseModel):
+    ticker: str
+    name: Optional[str] = None
+    domain: Optional[str] = None
+    price: Optional[float] = None
+    verdict: str
+    composite: int
+    confidence: int
+    signals: dict[str, VerdictSignalDetail]
+    why: str
+    price_target: Optional[float] = None
+    stop_loss: Optional[float] = None
+    analyst_upside: Optional[float] = None
+    risk_reward: Optional[float] = None
+
+
+class RadarResponse(BaseModel):
+    mode: str
+    stocks: list[RadarStock]
+    total_scanned: int
+    shortlist_count: int
+    cached_at: Optional[float] = None
+    scan_duration_seconds: Optional[float] = None

@@ -1,4 +1,5 @@
 import axios from 'axios'
+import type { VerdictResponse } from '../lib/types'
 
 const api = axios.create({ baseURL: '/api' })
 
@@ -73,7 +74,7 @@ export const gradesApi = {
 
 export const verdictApi = {
   get: (ticker: string, period = '1y') =>
-    api.get<import('../lib/types').VerdictResponse>(`/stocks/${ticker}/verdict`, { params: { period } }).then(r => r.data),
+    api.get<VerdictResponse>(`/stocks/${ticker}/verdict`, { params: { period } }).then(r => r.data),
 }
 
 export const watchlistApi = {

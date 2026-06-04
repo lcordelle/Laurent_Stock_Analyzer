@@ -801,7 +801,7 @@ _NEWS_BULLISH_STRONG = {
     "beats", "exceeds", "record", "upgrade", "raises guidance",
     "outperforms", "strong growth", "buyback", "dividend increase", "partnership",
 }
-_NEWS_BULLISH_MILD = {"growth", "positive", "advances", "gains", "momentum", "recovery"}
+_NEWS_BULLISH_MILD = {"positive", "advances", "gains", "momentum", "recovery"}
 _NEWS_BEARISH_STRONG = {
     "misses", "downgrade", "cuts guidance", "disappoints",
     "investigation", "fraud", "lawsuit", "bankruptcy", "layoffs", "recall",
@@ -812,7 +812,7 @@ _NEWS_BEARISH_MILD = {"decline", "falls", "concern", "weak", "slowdown", "loss"}
 def _score_news_sentiment(news: list) -> tuple[int, str]:
     """Keyword-based news sentiment scorer. Returns (score 0-100, label).
     Upgrade path: swap internals only — caller signature is stable."""
-    from datetime import datetime
+    from datetime import datetime, timezone
 
     def _recency_weight(published) -> float:
         if not published:
@@ -822,7 +822,7 @@ def _score_news_sentiment(news: list) -> tuple[int, str]:
             for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
                 try:
                     pub = datetime.strptime(pub_str, fmt)
-                    age_h = (datetime.utcnow() - pub).total_seconds() / 3600
+                    age_h = (datetime.now(timezone.utc).replace(tzinfo=None) - pub).total_seconds() / 3600
                     if age_h <= 24:   return 3.0
                     if age_h <= 72:   return 1.5
                     if age_h <= 168:  return 0.5

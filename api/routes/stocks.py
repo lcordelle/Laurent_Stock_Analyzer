@@ -797,6 +797,101 @@ def _analyze_ticker(ticker: str, period: str) -> FullStockAnalysis:
     )
 
 
+_NEWS_BULLISH_STRONG = {
+    "beats", "exceeds", "record", "upgrade", "raises guidance",
+    "outperforms", "strong growth", "buyback", "dividend increase", "partnership",
+}
+_NEWS_BULLISH_MILD = {"growth", "positive", "advances", "gains", "momentum", "recovery"}
+_NEWS_BEARISH_STRONG = {
+    "misses", "downgrade", "cuts guidance", "disappoints",
+    "investigation", "fraud", "lawsuit", "bankruptcy", "layoffs", "recall",
+}
+_NEWS_BEARISH_MILD = {"decline", "falls", "concern", "weak", "slowdown", "loss"}
+
+
+def _score_news_sentiment(news: list) -> tuple[int, str]:
+    """Keyword-based news sentiment scorer. Returns (score 0-100, label).
+    Upgrade path: swap internals only — caller signature is stable."""
+    from datetime import datetime
+
+    def _recency_weight(published) -> float:
+        if not published:
+            return 0.5
+        try:
+            pub_str = str(published)[:19]
+            for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+                try:
+                    pub = datetime.strptime(pub_str, fmt)
+                    age_h = (datetime.now() - pub).total_seconds() / 3600
+                    if age_h <= 24:   return 3.0
+                    if age_h <= 72:   return 1.5
+                    if age_h <= 168:  return 0.5
+                    return 0.0
+                except ValueError:
+                    continue
+        except Exception:
+            pass
+        return 0.5
+
+    def _score_text(text: str) -> float:
+        t = text.lower()
+        s = 0.0
+        for kw in _NEWS_BULLISH_STRONG:
+            if kw in t: s += 2
+        for kw in _NEWS_BULLISH_MILD:
+            if kw in t: s += 1
+        for kw in _NEWS_BEARISH_STRONG:
+            if kw in t: s -= 2
+        for kw in _NEWS_BEARISH_MILD:
+            if kw in t: s -= 1
+        return max(-10.0, min(10.0, s))
+
+    weighted_sum = 0.0
+    total_weight = 0.0
+    for article in news:
+        w = _recency_weight(article.published)
+        if w == 0.0:
+            continue
+        text = f"{article.title or ''} {article.summary or ''}"
+        weighted_sum += _score_text(text) * w
+        total_weight += w
+
+    if total_weight == 0.0:
+        return 50, "No Recent News"
+
+    raw = weighted_sum / total_weight
+    score = int(max(0, min(100, 50 + raw * 5)))
+    if score >= 75:   label = "Positive"
+    elif score >= 60: label = "Mildly Positive"
+    elif score >= 40: label = "Neutral"
+    elif score >= 25: label = "Mildly Negative"
+    else:             label = "Negative"
+    return score, label
+
+
+def _score_earnings_quality(earnings_dates: list) -> tuple[int, str]:
+    """Score based on last 4 EPS beat/miss results. Returns (score 0-100, label)."""
+    with_beat = [e for e in earnings_dates if e.beat is not None]
+    recent = sorted(with_beat, key=lambda e: e.date, reverse=True)[:4]
+
+    if len(recent) < 2:
+        return 50, "Insufficient Data"
+
+    score = 50
+    for e in recent:
+        score += 20 if e.beat else -20
+    beat_count = sum(1 for e in recent if e.beat)
+    if beat_count == 4:              score += 10
+    elif beat_count == len(recent):  score += 5
+
+    score = max(0, min(100, score))
+    if score >= 80:   label = "Consistent Beats"
+    elif score >= 60: label = "Mostly Beats"
+    elif score >= 40: label = "Mixed"
+    else:             label = "Missing Estimates"
+    return score, label
+
+
 def _compute_verdict(analysis: FullStockAnalysis) -> VerdictResponse:
     sig = analysis.trading_signals
     score = analysis.score

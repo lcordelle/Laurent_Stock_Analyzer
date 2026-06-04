@@ -170,9 +170,8 @@ function TopPickMini({ stock, rank }: { stock: ScannedStock; rank: number }) {
 
 const NAV_SHORTCUTS = [
   { icon: BarChart2, label: 'Deep Analysis', sub: 'Single stock deep dive', to: '/analysis', color: '#00d4ff' },
-  { icon: Filter,    label: 'Screener',      sub: 'Filter by fundamentals', to: '/screener', color: '#ffab00' },
-  { icon: Briefcase, label: 'Portfolio',     sub: 'Holdings analysis + signals', to: '/screener', color: '#a78bfa' },
-  { icon: Zap,       label: 'Opportunities', sub: 'Live market intelligence', to: '/opportunities', color: '#ffd700' },
+  { icon: Zap,       label: 'Radar',         sub: 'Live market intelligence', to: '/radar', color: '#ffd700' },
+  { icon: Briefcase, label: 'Portfolio',     sub: 'Holdings analysis + signals', to: '/portfolio', color: '#a78bfa' },
   { icon: FileText,  label: 'Reports',       sub: 'Generate PDF reports', to: '/reports', color: '#94a3b8' },
 ]
 

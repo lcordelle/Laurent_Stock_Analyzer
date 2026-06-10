@@ -202,10 +202,19 @@ export interface RadarStock {
   }
   why: string
   price_target?: number
+  price_target_bear?: number
+  price_target_bull?: number
   stop_loss?: number
   analyst_upside?: number
   risk_reward?: number
   ai_price_target?: number
+  entry_timing: string
+  entry_price_zone?: [number, number]
+  action_urgency: string
+  catalyst_event?: string
+  catalyst_days?: number
+  conflict_note?: string
+  position_size_pct?: number
 }
 
 export interface RadarResponse {

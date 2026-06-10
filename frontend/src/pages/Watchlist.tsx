@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { Bookmark, X, RefreshCw, TrendingUp, TrendingDown, Info } from 'lucide-react'
@@ -290,8 +290,11 @@ export default function Watchlist() {
     queryFn: () => watchlistApi.signals(tickers),
     enabled: tickers.length > 0,
     staleTime: 2 * 60_000,
-    onSuccess: () => setLastUpdated(new Date()),
   })
+
+  useEffect(() => {
+    if (data) setLastUpdated(new Date())
+  }, [data])
 
   const { data: pfData, isLoading: pfLoading, isFetching: pfFetching } = useQuery<WatchlistSignalsResponse>({
     queryKey: ['portfolio-signals', pfTickers, pfRefreshTrigger],

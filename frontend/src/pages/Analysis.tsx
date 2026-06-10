@@ -598,7 +598,7 @@ export default function Analysis() {
 
                   <div className="flex items-start justify-between">
                     <div>
-                      <div className="text-xs uppercase tracking-widest mb-0.5" style={{ color: '#475569' }}>Signal</div>
+                      <div className="text-xs uppercase tracking-widest mb-0.5" style={{ color: '#475569' }}>Tech Signal</div>
                       <div className="text-2xl font-black tracking-tight" style={{ color: sc }}>{signal ?? '—'}</div>
                     </div>
                     <div className="text-right">

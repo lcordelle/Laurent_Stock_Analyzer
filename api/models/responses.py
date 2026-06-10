@@ -290,10 +290,20 @@ class RadarStock(BaseModel):
     signals: dict[str, VerdictSignalDetail]
     why: str
     price_target: Optional[float] = None
+    price_target_bear: Optional[float] = None
+    price_target_bull: Optional[float] = None
     stop_loss: Optional[float] = None
     analyst_upside: Optional[float] = None
     risk_reward: Optional[float] = None
     ai_price_target: Optional[float] = None
+    # decision layer
+    entry_timing: str = "EVALUATE"
+    entry_price_zone: Optional[list[float]] = None
+    action_urgency: str = "WATCH"   # ACT_NOW | WATCH | REST
+    catalyst_event: Optional[str] = None
+    catalyst_days: Optional[int] = None
+    conflict_note: Optional[str] = None
+    position_size_pct: Optional[float] = None
 
 
 class RadarResponse(BaseModel):

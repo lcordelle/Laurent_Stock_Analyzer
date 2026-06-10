@@ -19,7 +19,7 @@ router = APIRouter(tags=["opportunities"])
 logger = logging.getLogger(__name__)
 
 _analyzer = StockAnalyzer()
-_SEM = asyncio.Semaphore(4)  # low concurrency to avoid yfinance rate-limits
+_SEM = asyncio.Semaphore(6)  # low concurrency to avoid yfinance rate-limits
 
 _YF_INFO_CACHE = Path.home() / '.cache' / 'stock_analyzer' / 'yf_cache'
 _YF_INFO_CACHE.mkdir(parents=True, exist_ok=True)
@@ -106,104 +106,146 @@ def _restore_radar_cache_from_disk() -> None:
 
 _restore_radar_cache_from_disk()
 
-# ── ~500-stock universe across 20 domains ────────────────────────────────────
+# ── ~850-stock universe across 20 domains ────────────────────────────────────
 SCAN_UNIVERSE: dict[str, list[str]] = {
     "AI & Semiconductors": [
         "NVDA","AMD","AVGO","TSM","ASML","AMAT","KLAC","ARM","MRVL","LRCX",
         "SNPS","CDNS","ONTO","ACLS","FORM","QCOM","INTC","SMCI","MPWR","MCHP",
         "WOLF","COHR","IPGP","SLAB","OLED",
+        "ADI","MU","NXPI","ON","ENTG","TER","SWKS","CRUS","MTSI","NVMI",
+        "ALGM","SITM","LSCC","AEHR","ACMR",
     ],
     "Cloud & Enterprise Tech": [
         "MSFT","CRM","NOW","SNOW","DDOG","PLTR","META","GOOGL","MDB","NET",
         "HUBS","OKTA","GTLB","BILL","ZM","ORCL","ADSK","TTD","TWLO","ESTC",
         "CFLT","AZPN","ZI","APPF","PTC",
+        "TEAM","DOCU","WIX","FROG","CSCO","PSTG","AI","APPN","CVLT","ALTR",
+        "PRGS","INFA","MSTR","DOMO","WK",
     ],
     "Mid-Cap SaaS & Platforms": [
         "ADBE","INTU","WDAY","VEEV","PAYC","PCTY","SMAR","ASAN","BRZE","FRSH",
         "BOX","DOCN","PD","NCNO","ENFN","RAMP","XMTR","TASK",
+        "GLBE","JAMF","FOUR","SEMR","PCOR","ALRM","DSGX","EVBG","LPSN","WEAVE",
+        "EVCM","DCBO",
     ],
     "Healthcare & Med-Tech": [
         "LLY","NVO","UNH","ISRG","MDT","ABT","BSX","SYK","EW","DXCM",
         "NTRA","RVMD","INSP","PODD","ITGR","TMO","DHR","IQVIA","MEDP","ICLR",
         "HOLX","NVCR","EXAS","AMED","MMSI","GEHC","PGNY","PRVA","MLAB","RMD",
+        "CI","HUM","ELV","CVS","HCA","CNC","MOH","ALGN","STE","HSIC",
+        "BAX","IRTC","VTRS","PINC","OMCL","ZBH","BDX","SGRY",
     ],
     "Biotech": [
         "ABBV","VRTX","REGN","MRNA","BIIB","ALNY","BMRN","EXEL","RARE","ARWR",
         "IONS","PTGX","KYMR","ACAD","GILD","AMGN","INCY","RGEN","BEAM","NTLA",
         "EDIT","CRSP","AKRO","FOLD","SRPT","UTHR","MRUS","DNLI","IMVT","NUVL",
+        "PFE","MRK","BMY","NBIX","VKTX","ALKS","RCKT","XNCR","CLDX","IOVA",
+        "TWST","PRTA","SRRK","TSVT","KROS","HALO","IMCR","ARVN",
     ],
     "Financials & Fintech": [
         "JPM","V","MA","BLK","GS","AXP","MS","SCHW","ICE","CME",
         "PYPL","SQ","AFRM","NU","SOFI","FIS","FISV","SPGI","MCO","NDAQ",
         "CBOE","WEX","HOOD","COIN","MELI","IBKR","RJF","LPLA",
+        "BX","KKR","APO","ARES","OWL","MSCI","BK","STT","NTRS","RELY",
+        "ALIT","PAYO","ALLY","SYF","COF","DFS","RKT","UWMC","OPFI","ENVA",
     ],
     "Banks & Regional Finance": [
         "BAC","WFC","C","USB","PNC","TFC","CFG","FITB","HBAN","KEY",
         "RF","ZION","CMA","WAL","EWBC","WTFC","BOKF","FHB","COLB","BANR",
         "FFIN","CVBF","TCBI","IBCP",
+        "MTB","OZK","WBS","FCNCA","LKFN","INDB","HTLF","FBMS","SFBS","NBTB",
+        "PPBI","NBT","HBNC","CATY","CADE","TBBK",
     ],
     "Insurance & Asset Management": [
         "BRK-B","MET","PRU","AFL","CB","TRV","ALL","TROW","AMG","BEN",
         "RLI","WRB","RNR","MKL","RYAN","ACGL","RE","ORI",
+        "AIG","HIG","ERIE","GL","EQH","VOYA","PFG","CRBG","GNW","CNO",
+        "AFG","KMPR",
     ],
     "Clean Energy & Nuclear": [
         "CEG","VST","CCJ","NEE","FSLR","XOM","ENPH","SEDG","RUN","OKLO",
         "SMR","NNE","BEP","AES","BE","STEM","ARRY","SHLS","CHPT","EVGO",
         "HASI","CWEN","NOVA",
+        "PLUG","NEP","ORA","ITRI","FLNC","GPRE","AMRC","FCEL","MAXN",
+        "POWI","AMPS",
     ],
     "Energy & Oil/Gas": [
         "CVX","COP","EOG","FANG","DVN","APA","MRO","OXY","HAL","SLB",
         "BKR","NOV","MTDR","CIVI","SM","CNX","AR","EQT","RRC","CTRA",
         "PSX","VLO",
+        "LNG","KMI","WMB","OKE","ET","EPD","MPC","DINO","TRGP","HES",
+        "DK","PBF","PR","CRGY","VTLE","BTU","AM","HESM",
     ],
     "Consumer & E-Commerce": [
         "AMZN","COST","MCD","TSLA","AAPL","SBUX","NKE","TGT","LULU","SHOP",
         "ETSY","DUOL","APP","BROS","EBAY","ROST","TJX","ULTA","DLTR","DG",
         "YUM","CPNG",
+        "F","GM","RIVN","KR","W","RL","TPR","ANF","URBN","BBY",
+        "FIVE","SFM","CHWY","CL","CHD","CLX","HSY","GIS","CPB","SJM",
+        "MKC","EL",
     ],
     "Transportation & Logistics": [
         "UPS","FDX","UBER","LYFT","DASH","ABNB","BKNG","DAL","UAL","LUV",
         "CSX","NSC","UNP","CP","EXPD","CHRW","XPO","ODFL","SAIA","JBHT",
         "WERN","LSTR",
+        "GXO","KNX","R","MATX","HUBG","SKYW","HWM","ATSG","HTZ","CAR",
+        "TFII","GFL","MRTN",
     ],
     "Defence & Cybersecurity": [
         "LMT","RTX","NOC","CRWD","PANW","ZS","GD","HII","LDOS","FTNT",
         "S","CYBR","TENB","QLYS","BAH","SAIC","LHX","DRS","TDG","VRNS",
         "HEI","SPR","KTOS","SAIL",
+        "CACI","AVAV","TDY","MRCY","BWXT","RCAT","GEO","SYM","ASGN","CW",
+        "PLXS","VSAT","PSN","VVX","GENI",
     ],
     "Industrial & Infrastructure": [
         "CAT","DE","ETN","PWR","EMR","ROK","CARR","ITW","GWW","FAST",
         "URI","WIRE","CTAS","PAYX","MSA","AME","HUBB","AECOM","JCI","XYL",
         "IDEX","NDSN","GNRC","TRMB","FTV","PH","FBIN",
+        "MMM","GEV","HON","ROP","TT","CMI","PCAR","WAB","ESAB","OTIS",
+        "NVT","AIT","DCI","BLDR","UFPI","SXI","AWI","FLR","EXPO",
     ],
     "REITs & Real Assets": [
         "AMT","PLD","EQIX","DLR","PSA","EXR","O","VICI","SPG","AVB",
         "IRM","GLPI","CBRE","MAA","WPC","REXR","FR","STAG","NNN","BXP",
         "CCI","COLD",
+        "SUI","ELS","IIPR","FRT","REG","KIM","SKT","UDR","ESS","EQR",
+        "VTR","LTC","GOOD","EPR","HST","NSA","CUBE","NHI",
     ],
     "Dividend Champions": [
         "JNJ","PG","KO","PEP","MMC","ADP","TXN","CINF","IBM","HD",
         "LOW","WMT","T","VZ","PM","MO","NUE","GPC",
+        "CL","DUK","SO","D","WEC","ATO","ED","AWK","SWK","BCE",
+        "SNA","MAR",
     ],
     "Small-Cap Growth": [
         "CELH","ASTS","RKLB","IONQ","AXON","TOST","CAVA","DKNG","MNDY","HIMS",
         "AMBA","CRDO","ALAB","KVYO","DOCS","TRUP","FLYW","ACVA","NARI","INMD",
         "LMND","JOBY","RXRX","ELF","ONON","BIRK","ROIV","SOUN","PLTK","OSCR",
+        "PRCT","UPST","MARA","RIOT","KLIC","VERX","GSHD","AMPL","VTEX","CPRX",
+        "RCUS","MNKD","INVA","CDMO","BIGC","VNET","SANA","RBRK",
     ],
     "International ADRs": [
         "SAP","TM","SNY","BABA","JD","SE","GRAB","WDS","RIO","BHP",
         "VALE","BNTX","RACE","ASAI","UL","SHEL","BP","RELX","UBS","DB",
         "ING","ABB","INFY","WIT","CNQ","STLA","ERIC","BTI",
+        "NVS","RHHBY","HMC","SONY","LYG","HSBC","SMFG","MFG","MUFG","KB",
+        "BILI","XP","ITUB","PAGS","NMR","AER","ABEV","VIV","CHL","SID",
+        "GLPG","VEON",
     ],
     "Materials & Commodities": [
         "FCX","NEM","GOLD","ALB","MP","LAC","LIN","APD","SHW","PPG",
         "MOS","NTR","CF","EMN","LYB","DOW","DD","CE","HUN","OLN",
         "RPM","WFG","CTVA","AVY","IFF","BALL","SEE",
+        "IP","PKG","MLM","VMC","CRH","STLD","RS","CLF","CMC","TREX",
+        "AZEK","SLVM","GEF","ATI","SMG","AVNT","BIPC","SON",
     ],
     "Communication & Media": [
         "NFLX","DIS","SPOT","SNAP","PINS","RBLX","TTWO","EA","MTCH","WBD",
         "FOXA","TMUS","CHTR","PARA","SIRI","IAC","NWSA","RDDT","MGNI","ATUS",
         "ROKU","FUBO","CARG","WMG","LYV",
+        "IPG","OMC","NYT","LUMN","CMCSA","SBGI","TKO","NXST","AMC","ZD",
+        "IHRT","AMCX","QRTEA","FOX","RCI","SSTK","ANGI",
     ],
 }
 
@@ -714,22 +756,71 @@ class MarketOpportunitiesResponse(BaseModel):
     domain_stats: dict[str, DomainStat] = {}
 
 
+def _action_urgency(entry_timing: str, verdict: str) -> str:
+    """Classify a stock into ACT_NOW / WATCH / REST for the decision board."""
+    is_buy = "BUY" in verdict
+    enters = entry_timing.startswith("ENTER") or entry_timing.startswith("SCALE")
+    if is_buy and enters:
+        return "ACT_NOW"
+    if is_buy or (verdict == "HOLD" and entry_timing not in ("DO NOT ENTER",)):
+        return "WATCH"
+    return "REST"
+
+
+def _safe_float_radar(v) -> Optional[float]:
+    """NaN/inf-safe float for RadarStock fields."""
+    import math
+    if v is None:
+        return None
+    try:
+        f = float(v)
+        return None if not math.isfinite(f) else f
+    except (TypeError, ValueError):
+        return None
+
+
+_RADAR_FLOAT_FIELDS = (
+    "price", "price_target", "price_target_bear", "price_target_bull",
+    "stop_loss", "analyst_upside", "risk_reward", "ai_price_target",
+    "position_size_pct",
+)
+
+
+def _sanitize_radar_dict(s: dict) -> dict:
+    """Replace NaN/inf floats in a cached stock dict so Pydantic can serialize safely."""
+    out = dict(s)
+    for field in _RADAR_FLOAT_FIELDS:
+        if field in out:
+            out[field] = _safe_float_radar(out[field])
+    if "entry_price_zone" in out and out["entry_price_zone"] is not None:
+        out["entry_price_zone"] = [_safe_float_radar(v) for v in out["entry_price_zone"]]
+    return out
+
+
 async def _full_scan_ticker(ticker: str, domain: Optional[str] = None) -> Optional[RadarStock]:
-    """Run full _analyze_ticker + _compute_verdict for a single ticker. Returns RadarStock or None on error."""
+    """Full analysis + verdict for a single ticker. Returns RadarStock or None on error."""
     try:
         loop = asyncio.get_running_loop()
         analysis = await loop.run_in_executor(None, _analyze_ticker, ticker, "1y")
         if analysis.error:
             return None
         verdict = _compute_verdict(analysis)
-        price = analysis.metrics.current_price if analysis.metrics else None
+        price = _safe_float_radar(analysis.metrics.current_price if analysis.metrics else None)
+
         analyst_upside = None
         if (analysis.analyst_rating and analysis.analyst_rating.target_mean is not None
                 and price and price > 0):
-            analyst_upside = round(
-                (analysis.analyst_rating.target_mean - price) / price * 100, 1
-            )
+            raw_up = (analysis.analyst_rating.target_mean - price) / price * 100
+            analyst_upside = _safe_float_radar(round(raw_up, 1))
+
         sig = analysis.trading_signals
+        ai_price_target = _safe_float_radar(
+            round(analysis.forecast.forecast_price, 2)
+            if analysis.forecast and analysis.forecast.forecast_price else None
+        )
+
+        urgency = _action_urgency(verdict.entry_timing, verdict.verdict)
+
         return RadarStock(
             ticker=ticker,
             name=analysis.company_name,
@@ -741,9 +832,19 @@ async def _full_scan_ticker(ticker: str, domain: Optional[str] = None) -> Option
             signals=verdict.signals,
             why=verdict.why,
             price_target=verdict.price_target,
+            price_target_bear=verdict.price_target_bear,
+            price_target_bull=verdict.price_target_bull,
             stop_loss=verdict.stop_loss,
             analyst_upside=analyst_upside,
-            risk_reward=sig.risk_reward if sig else None,
+            risk_reward=_safe_float_radar(sig.risk_reward if sig else None),
+            ai_price_target=ai_price_target,
+            entry_timing=verdict.entry_timing,
+            entry_price_zone=verdict.entry_price_zone,
+            action_urgency=urgency,
+            catalyst_event=verdict.catalyst_event,
+            catalyst_days=verdict.catalyst_days,
+            conflict_note=verdict.conflict_note,
+            position_size_pct=verdict.position_size_pct,
         )
     except Exception as e:
         logger.debug("_full_scan_ticker failed for %s: %s", ticker, e)
@@ -751,7 +852,7 @@ async def _full_scan_ticker(ticker: str, domain: Optional[str] = None) -> Option
 
 
 async def _two_pass_scan() -> list:
-    """Two-pass Radar scan: quick scan top 50 → full verdict on each. Returns list of RadarStock dicts."""
+    """Two-pass Radar scan: quick scan top 100 → full verdict on each. Returns list of RadarStock dicts."""
     global _radar_cache, _radar_cache_ts, _radar_scan_running
     if _radar_scan_running:
         return _radar_cache or []
@@ -770,9 +871,9 @@ async def _two_pass_scan() -> list:
                 if t not in ticker_domain:
                     ticker_domain[t] = domain
 
-        # Take top 50 from quick scan by combined_score
+        # Take top 100 from quick scan by combined_score
         all_ideas = _cache.get("all_ideas", []) if _cache else []
-        top_50 = sorted(all_ideas, key=lambda x: x.get("combined_score", 0), reverse=True)[:50]
+        top_50 = sorted(all_ideas, key=lambda x: x.get("combined_score", 0), reverse=True)[:100]
         top_tickers = [(s["ticker"], ticker_domain.get(s["ticker"])) for s in top_50]
 
         logger.info("Radar pass 2: running full verdict on %d stocks", len(top_tickers))
@@ -946,12 +1047,24 @@ async def refresh_opportunities(_: str = Depends(verify_token)):
 
 @router.get("/radar", response_model=RadarResponse)
 async def get_radar(_: str = Depends(verify_token)):
+    # Never block the HTTP thread — always return immediately from cache.
+    # If cache is empty, trigger a background scan and return 202 status hint via warming flag.
+    if _radar_cache is None and not _radar_scan_running:
+        asyncio.create_task(_two_pass_scan())
+
     if _radar_cache is None:
-        await _two_pass_scan()
-    if _radar_cache is None:
-        raise HTTPException(503, detail="Radar scan still warming, please retry in a few seconds")
+        # Return empty warming response — frontend polls until populated
+        return RadarResponse(
+            mode="universe",
+            stocks=[],
+            total_scanned=0,
+            shortlist_count=0,
+            cached_at=None,
+            scan_duration_seconds=None,
+        )
+
     logger.debug("Radar served from cache (age %.0fs)", time.time() - _radar_cache_ts)
-    stocks = [RadarStock(**s) for s in _radar_cache]
+    stocks = [RadarStock(**_sanitize_radar_dict(s)) for s in _radar_cache]
     return RadarResponse(
         mode="universe",
         stocks=stocks,
@@ -967,7 +1080,7 @@ async def refresh_radar(_: str = Depends(verify_token)):
     _radar_cache_ts = 0.0
     asyncio.create_task(_two_pass_scan())
     if _radar_cache is not None:
-        stocks = [RadarStock(**s) for s in _radar_cache]
+        stocks = [RadarStock(**_sanitize_radar_dict(s)) for s in _radar_cache]
         return RadarResponse(
             mode="universe",
             stocks=stocks,

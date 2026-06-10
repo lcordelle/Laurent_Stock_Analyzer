@@ -1,6 +1,18 @@
 from __future__ import annotations
+import math
 import os
 from api.models.responses import FullStockAnalysis, VerdictSignalDetail, VerdictResponse
+
+
+def _clean(v: float | None) -> float | None:
+    """Return None for NaN/inf — keeps JSON serialisation clean."""
+    if v is None:
+        return None
+    try:
+        f = float(v)
+        return None if (not math.isfinite(f)) else f
+    except (TypeError, ValueError):
+        return None
 
 _NEWS_BULLISH_STRONG = {
     "beats", "exceeds", "record", "upgrade", "raises guidance",
@@ -260,18 +272,21 @@ def _position_size(
 def _price_target_range(
     rat, sig, price: float | None
 ) -> tuple[float | None, float | None, float | None]:
-    """Returns (bear, base, bull) price targets."""
+    """Returns (bear, base, bull) price targets. NaN/inf values are dropped."""
     base = None
     bear = None
     bull = None
 
     if rat:
-        if rat.target_mean:
-            base = round(rat.target_mean, 2)
-        if rat.target_low:
-            bear = round(rat.target_low, 2)
-        if rat.target_high:
-            bull = round(rat.target_high, 2)
+        base = _clean(rat.target_mean)
+        if base:
+            base = round(base, 2)
+        bear_raw = _clean(rat.target_low)
+        if bear_raw:
+            bear = round(bear_raw, 2)
+        bull_raw = _clean(rat.target_high)
+        if bull_raw:
+            bull = round(bull_raw, 2)
 
     # Derive missing endpoints from base if we have price
     if base and price and price > 0:
@@ -576,7 +591,7 @@ def _compute_verdict(analysis: FullStockAnalysis, time_horizon: str = "swing") -
     if price_target is None and sig and sig.tp1:
         price_target = sig.tp1
 
-    stop_loss = round(sig.stop_loss, 2) if sig and sig.stop_loss else None
+    stop_loss = _clean(round(sig.stop_loss, 2) if sig and sig.stop_loss else None)
 
     # ── Entry timing ─────────────────────────────────────────────────────────
     earnings_prox = sig.earnings_proximity if sig else None

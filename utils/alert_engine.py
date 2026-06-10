@@ -31,6 +31,8 @@ CONDITION_LABELS = {
     'price_below': 'Price Below',
     'rsi_above': 'RSI Above',
     'rsi_below': 'RSI Below',
+    'approaching_buy': 'Approaching BUY Signal',
+    'approaching_sell': 'Approaching SELL Signal',
 }
 
 

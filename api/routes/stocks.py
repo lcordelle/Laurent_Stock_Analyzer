@@ -815,9 +815,9 @@ async def batch(body: BatchRequest, _: str = Depends(verify_token)):
 
 
 @router.get("/stocks/{ticker}/verdict", response_model=VerdictResponse)
-async def get_verdict(ticker: str, period: str = "1y", _: str = Depends(verify_token)):
+async def get_verdict(ticker: str, period: str = "1y", horizon: str = "swing", _: str = Depends(verify_token)):
     loop = asyncio.get_event_loop()
     analysis = await loop.run_in_executor(None, _analyze_ticker, ticker.upper(), period)
     if analysis.error:
         raise HTTPException(status_code=404, detail=analysis.error)
-    return _compute_verdict(analysis)
+    return _compute_verdict(analysis, time_horizon=horizon)

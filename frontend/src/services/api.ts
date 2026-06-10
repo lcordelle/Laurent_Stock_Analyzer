@@ -80,8 +80,8 @@ export const gradesApi = {
 }
 
 export const verdictApi = {
-  get: (ticker: string, period = '1y') =>
-    api.get<VerdictResponse>(`/stocks/${ticker}/verdict`, { params: { period } }).then(r => r.data),
+  get: (ticker: string, period = '1y', horizon = 'swing') =>
+    api.get<VerdictResponse>(`/stocks/${ticker}/verdict`, { params: { period, horizon } }).then(r => r.data),
 }
 
 export const watchlistApi = {

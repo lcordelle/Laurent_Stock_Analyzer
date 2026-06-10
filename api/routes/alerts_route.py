@@ -1,8 +1,9 @@
 """
-Price & Signal Alert Routes — CRUD for alert rules.
+Price & Signal Alert Routes — CRUD for alert rules + proximity scanning.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from fastapi import APIRouter, Depends
@@ -45,3 +46,51 @@ async def remove_alert(alert_id: str, _: str = Depends(verify_token)):
 async def reset(alert_id: str, _: str = Depends(verify_token)):
     reset_alert(alert_id)
     return {"ok": True}
+
+
+class ProximityScanRequest(BaseModel):
+    tickers: list[str]
+    threshold_pts: float = 5.0  # points within BUY/SELL boundary to flag
+
+
+@router.post("/alerts/proximity")
+async def proximity_scan(body: ProximityScanRequest, _: str = Depends(verify_token)):
+    """Scan watchlist tickers and flag those approaching a signal boundary."""
+    from api.routes.stocks import _analyze_ticker
+    from api.utils.verdict import _compute_verdict
+
+    BUY_THRESHOLD = 60.0
+    SELL_THRESHOLD = 45.0
+
+    loop = asyncio.get_event_loop()
+    approaching = []
+
+    async def _check(ticker: str):
+        try:
+            analysis = await loop.run_in_executor(None, _analyze_ticker, ticker.upper(), "3mo")
+            if analysis.error:
+                return
+            v = _compute_verdict(analysis)
+            score = float(v.vf_score)
+            gap_to_buy  = BUY_THRESHOLD  - score
+            gap_to_sell = score - SELL_THRESHOLD
+
+            if 0 < gap_to_buy <= body.threshold_pts:
+                approaching.append({
+                    "ticker": ticker, "score": score,
+                    "signal": "APPROACHING_BUY",
+                    "gap": round(gap_to_buy, 1),
+                    "note": f"{round(gap_to_buy, 1)} pts from BUY signal",
+                })
+            elif 0 < gap_to_sell <= body.threshold_pts:
+                approaching.append({
+                    "ticker": ticker, "score": score,
+                    "signal": "APPROACHING_SELL",
+                    "gap": round(gap_to_sell, 1),
+                    "note": f"{round(gap_to_sell, 1)} pts from SELL signal",
+                })
+        except Exception as exc:
+            logger.warning("proximity_scan failed for %s: %s", ticker, exc)
+
+    await asyncio.gather(*[_check(t) for t in body.tickers[:30]])
+    return {"approaching": sorted(approaching, key=lambda x: x["gap"])}

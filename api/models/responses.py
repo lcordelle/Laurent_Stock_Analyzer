@@ -266,6 +266,17 @@ class VerdictResponse(BaseModel):
     price_target: Optional[float] = None
     stop_loss: Optional[float] = None
     why: str
+    # decision layer
+    time_horizon: str = "swing"
+    entry_timing: str = "EVALUATE"
+    entry_price_zone: Optional[list[float]] = None  # [low, high]
+    price_target_bear: Optional[float] = None
+    price_target_bull: Optional[float] = None
+    position_size_pct: Optional[float] = None
+    position_max_pct: Optional[float] = None
+    catalyst_event: Optional[str] = None
+    catalyst_days: Optional[int] = None
+    conflict_note: Optional[str] = None
 
 
 class RadarStock(BaseModel):
@@ -282,6 +293,7 @@ class RadarStock(BaseModel):
     stop_loss: Optional[float] = None
     analyst_upside: Optional[float] = None
     risk_reward: Optional[float] = None
+    ai_price_target: Optional[float] = None
 
 
 class RadarResponse(BaseModel):

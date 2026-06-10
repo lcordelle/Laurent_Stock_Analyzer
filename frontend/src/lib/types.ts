@@ -170,6 +170,16 @@ export interface VerdictResponse {
   price_target?: number
   stop_loss?: number
   why: string
+  time_horizon: string
+  entry_timing: string
+  entry_price_zone?: [number, number]
+  price_target_bear?: number
+  price_target_bull?: number
+  position_size_pct?: number
+  position_max_pct?: number
+  catalyst_event?: string
+  catalyst_days?: number
+  conflict_note?: string
 }
 
 export interface RadarStock {
@@ -195,6 +205,7 @@ export interface RadarStock {
   stop_loss?: number
   analyst_upside?: number
   risk_reward?: number
+  ai_price_target?: number
 }
 
 export interface RadarResponse {

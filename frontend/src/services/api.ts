@@ -102,4 +102,16 @@ export const alertsApi = {
   reset: (id: string) => api.post(`/alerts/${id}/reset`).then(r => r.data),
 }
 
+export const newsApi = {
+  market: () => api.get<{ items: NewsItem[]; cached_at: number }>('/news/market').then(r => r.data),
+}
+
+export interface NewsItem {
+  title: string
+  source: string
+  url: string
+  published_at: string
+  sentiment: 'positive' | 'negative' | 'neutral'
+}
+
 export default api

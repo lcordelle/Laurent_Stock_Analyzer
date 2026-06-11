@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuth } from './hooks/useAuth'
 import TopNav from './components/layout/TopNav'
+import NewsTicker from './components/layout/NewsTicker'
 import Login from './pages/Login'
 import Home from './pages/Home'
 import Analysis from './pages/Analysis'
@@ -28,6 +29,8 @@ export default function App() {
           <Route path="/*" element={
             <AuthGate>
               <TopNav />
+              {/* 28px bottom clearance so ticker doesn't overlap page content */}
+              <div style={{ paddingBottom: '28px' }}>
               <Routes>
                 <Route path="/" element={<Home />} />
                 <Route path="/analysis" element={<Analysis />} />
@@ -39,6 +42,8 @@ export default function App() {
                 <Route path="/penny-stocks" element={<PennyStocks />} />
                 <Route path="/alerts" element={<Alerts />} />
               </Routes>
+              </div>
+              <NewsTicker />
             </AuthGate>
           } />
         </Routes>

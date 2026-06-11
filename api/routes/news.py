@@ -35,6 +35,45 @@ _NEGATIVE_WORDS = {
     "shooting", "coup", "protest", "unrest", "tension", "tensions",
 }
 
+_MARKET_MOVER_WORDS = {
+    # Fed / monetary policy
+    "fed", "federal", "reserve", "fomc", "powell", "rate", "rates",
+    "hike", "cut", "pivot", "tapering", "qe", "qt",
+    # Inflation / macro data
+    "inflation", "cpi", "ppi", "pce", "gdp", "deflation", "stagflation",
+    # Labour market
+    "jobs", "payroll", "nfp", "unemployment", "jobless", "layoffs", "hiring",
+    # Earnings
+    "earnings", "eps", "revenue", "beats", "misses", "guidance",
+    "outlook", "forecast", "quarterly", "results",
+    # Energy / commodities
+    "oil", "crude", "opec", "energy", "gas", "gold", "silver", "copper",
+    # Macro risks
+    "tariff", "tariffs", "trade", "sanctions", "default", "debt",
+    "ceiling", "shutdown", "stimulus", "bailout", "downgrade",
+    # Central banks (global)
+    "ecb", "boj", "pboc", "boe", "rba", "snb", "imf",
+    # Corporate events
+    "acquisition", "merger", "ipo", "buyout", "takeover", "spinoff",
+    "bankruptcy", "restructuring",
+    # Market-moving geopolitics
+    "war", "invasion", "strike", "strikes", "conflict", "escalation",
+    "sanctions", "embargo", "blockade",
+    # Tech / sector catalysts
+    "fda", "approved", "approval", "chip", "semiconductor",
+    "ai", "artificial intelligence", "nvidia", "apple", "microsoft",
+    # Rates / bonds
+    "yield", "treasury", "bond", "bonds", "spread", "dollar", "dxy",
+    # Recession signals
+    "recession", "contraction", "slowdown", "growth",
+}
+
+
+def _is_market_mover(title: str) -> bool:
+    words = set(title.lower().replace(",", " ").replace(".", " ").split())
+    return bool(words & _MARKET_MOVER_WORDS)
+
+
 _RSS_FEEDS = [
     # Markets
     ("MarketWatch", "https://feeds.marketwatch.com/marketwatch/marketpulse/"),
@@ -74,6 +113,7 @@ def _parse_rss(source: str, url: str) -> list[dict]:
                 "url": entry.get("link") or "",
                 "published_at": entry.get("published") or "",
                 "sentiment": _sentiment(title),
+                "market_mover": _is_market_mover(title),
             })
     except Exception as e:
         logger.debug("RSS fetch failed %s: %s", source, e)
@@ -101,6 +141,7 @@ def _fetch_yf_news() -> list[dict]:
                     "url": url,
                     "published_at": pub,
                     "sentiment": _sentiment(title),
+                    "market_mover": _is_market_mover(title),
                 })
         except Exception as e:
             logger.debug("yfinance news failed %s: %s", sym, e)

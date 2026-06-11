@@ -93,6 +93,9 @@ const LOADING_WORLD: NewsItem[] = [
   { title: 'Loading world news… BBC · Sky News · Al Jazeera · The Guardian', source: 'WORLD', url: '', published_at: '', sentiment: 'neutral' },
   { title: 'Fetching geopolitical and breaking news…', source: 'WORLD', url: '', published_at: '', sentiment: 'neutral' },
 ]
+const LOADING_MOVERS: NewsItem[] = [
+  { title: 'Scanning for market-moving events… Fed · CPI · Earnings · Tariffs · Oil · Yields · M&A', source: 'MOVERS', url: '', published_at: '', sentiment: 'neutral' },
+]
 
 export default function NewsTicker() {
   const { data, isError } = useQuery({
@@ -108,12 +111,15 @@ export default function NewsTicker() {
   const all = data?.items ?? []
   const marketItems = all.filter(i => MARKET_SOURCES.has(i.source))
   const worldItems  = all.filter(i => !MARKET_SOURCES.has(i.source))
+  const moverItems  = all.filter(i => i.market_mover)
 
   const row1 = marketItems.length ? marketItems : LOADING_MARKET
   const row2 = worldItems.length  ? worldItems  : LOADING_WORLD
+  const row3 = moverItems.length  ? moverItems  : LOADING_MOVERS
 
   const dur1 = row1 === LOADING_MARKET ? 14 : Math.max(20, row1.length * 3)
-  const dur2 = row2 === LOADING_WORLD  ? 16 : Math.max(20, row2.length * 3.5) // slight offset
+  const dur2 = row2 === LOADING_WORLD  ? 16 : Math.max(20, row2.length * 3.5)
+  const dur3 = row3 === LOADING_MOVERS ? 18 : Math.max(15, row3.length * 2.5) // faster — high urgency
 
   return (
     <div
@@ -121,9 +127,17 @@ export default function NewsTicker() {
       style={{
         backgroundColor: '#060a14',
         borderTop: '1px solid rgba(255,255,255,0.07)',
-        height: `${ROW_H * 2}px`,
+        height: `${ROW_H * 3}px`,
       }}
     >
+      <TickerRow
+        label="MOVERS"
+        labelBg="#ff4444"
+        items={row3}
+        durSec={dur3}
+        animName="ticker-movers"
+        borderBottom
+      />
       <TickerRow
         label="MARKETS"
         labelBg="#00d4ff"

@@ -112,6 +112,7 @@ export interface NewsItem {
   url: string
   published_at: string
   sentiment: 'positive' | 'negative' | 'neutral'
+  market_mover?: boolean
 }
 
 export default api

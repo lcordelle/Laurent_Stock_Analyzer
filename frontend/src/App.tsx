@@ -29,8 +29,8 @@ export default function App() {
           <Route path="/*" element={
             <AuthGate>
               <TopNav />
-              {/* 28px bottom clearance so ticker doesn't overlap page content */}
-              <div style={{ paddingBottom: '28px' }}>
+              {/* 52px bottom clearance for two-row ticker (2 × 26px) */}
+              <div style={{ paddingBottom: '52px' }}>
               <Routes>
                 <Route path="/" element={<Home />} />
                 <Route path="/analysis" element={<Analysis />} />

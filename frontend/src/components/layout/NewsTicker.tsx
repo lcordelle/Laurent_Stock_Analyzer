@@ -22,19 +22,26 @@ function TickerItem({ item }: { item: NewsItem }) {
   )
 }
 
+const LOADING_ITEMS: NewsItem[] = [
+  { title: 'Loading market news…', source: 'MARKET', url: '', published_at: '', sentiment: 'neutral' },
+  { title: 'Fetching live headlines from MarketWatch · CNBC · Reuters · Yahoo Finance', source: 'MARKET', url: '', published_at: '', sentiment: 'neutral' },
+]
+
 export default function NewsTicker() {
-  const { data } = useQuery({
+  const { data, isError } = useQuery({
     queryKey: ['market-news'],
     queryFn: newsApi.market,
     staleTime: 5 * 60_000,
     refetchInterval: 5 * 60_000,
+    retry: 2,
   })
 
-  const items = data?.items ?? []
-  if (items.length === 0) return null
+  const items = data?.items?.length ? data.items : isError ? [] : LOADING_ITEMS
+  // Hide entirely only on hard error
+  if (isError && !data?.items?.length) return null
 
-  // Duration scales with item count so speed stays constant (~80px/s at 40 chars/item)
-  const durationSec = Math.max(30, items.length * 8)
+  // Target ~120 px/s: each item ≈ 350 px wide → 350/120 ≈ 3s per item
+  const durationSec = items === LOADING_ITEMS ? 12 : Math.max(20, items.length * 3)
 
   return (
     <div
@@ -47,10 +54,10 @@ export default function NewsTicker() {
     >
       {/* Label */}
       <div
-        className="shrink-0 flex items-center gap-1.5 px-3 h-full z-10"
+        className="shrink-0 flex items-center gap-1.5 px-3 h-full"
         style={{
           backgroundColor: '#00d4ff',
-          borderRight: '1px solid rgba(255,255,255,0.1)',
+          borderRight: '1px solid rgba(0,0,0,0.3)',
         }}
       >
         <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
@@ -60,7 +67,7 @@ export default function NewsTicker() {
       </div>
 
       {/* Scrolling content */}
-      <div className="flex-1 overflow-hidden relative" style={{ height: '28px' }}>
+      <div className="flex-1 overflow-hidden" style={{ height: '28px' }}>
         <style>{`
           @keyframes ticker-scroll {
             0%   { transform: translateX(0); }
@@ -72,13 +79,13 @@ export default function NewsTicker() {
             white-space: nowrap;
             animation: ticker-scroll ${durationSec}s linear infinite;
             height: 28px;
+            padding-left: 16px;
           }
           .ticker-track:hover {
             animation-play-state: paused;
           }
         `}</style>
         <div className="ticker-track">
-          {/* Duplicate content so second copy fills the gap seamlessly */}
           {[...items, ...items].map((item, i) => (
             <TickerItem key={i} item={item} />
           ))}

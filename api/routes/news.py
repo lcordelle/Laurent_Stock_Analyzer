@@ -28,13 +28,24 @@ _NEGATIVE_WORDS = {
     "crash", "plunges", "plunge", "decline", "declines", "warning", "risk",
     "uncertainty", "inflation", "tariff", "tariffs", "default", "cut",
     "slumps", "slump", "fears", "concern", "concerns", "sell-off", "selloff",
+    # geopolitical / world events
+    "war", "strike", "strikes", "attack", "attacks", "killed", "dead", "deaths",
+    "explosion", "bomb", "missile", "invasion", "conflict", "crisis", "sanctions",
+    "shutdown", "collapse", "earthquake", "hurricane", "flood", "disaster",
+    "shooting", "coup", "protest", "unrest", "tension", "tensions",
 }
 
 _RSS_FEEDS = [
+    # Markets
     ("MarketWatch", "https://feeds.marketwatch.com/marketwatch/marketpulse/"),
-    ("Reuters", "https://feeds.reuters.com/reuters/businessNews"),
+    ("Reuters Biz", "https://feeds.reuters.com/reuters/businessNews"),
     ("CNBC", "https://www.cnbc.com/id/100003114/device/rss/rss.html"),
     ("Investopedia", "https://www.investopedia.com/feedbuilder/feed/getfeed?feedName=rss_headline"),
+    # World / Geopolitical
+    ("BBC World", "http://feeds.bbci.co.uk/news/world/rss.xml"),
+    ("Sky News", "https://feeds.skynews.com/feeds/rss/world.xml"),
+    ("Guardian", "https://www.theguardian.com/world/rss"),
+    ("Al Jazeera", "https://www.aljazeera.com/xml/rss/all.xml"),
 ]
 
 _YF_TICKERS = ["SPY", "QQQ", "^GSPC", "^DJI", "^VIX"]

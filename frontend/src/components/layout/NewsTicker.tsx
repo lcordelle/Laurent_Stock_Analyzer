@@ -101,8 +101,8 @@ export default function NewsTicker() {
   const { data, isError } = useQuery({
     queryKey: ['market-news'],
     queryFn: newsApi.market,
-    staleTime: 5 * 60_000,
-    refetchInterval: 5 * 60_000,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
     retry: 2,
   })
 
@@ -117,9 +117,9 @@ export default function NewsTicker() {
   const row2 = worldItems.length  ? worldItems  : LOADING_WORLD
   const row3 = moverItems.length  ? moverItems  : LOADING_MOVERS
 
-  const dur1 = row1 === LOADING_MARKET ? 14 : Math.max(20, row1.length * 3)
-  const dur2 = row2 === LOADING_WORLD  ? 16 : Math.max(20, row2.length * 3.5)
-  const dur3 = row3 === LOADING_MOVERS ? 18 : Math.max(15, row3.length * 2.5) // faster — high urgency
+  const dur1 = row1 === LOADING_MARKET ? 8  : Math.max(12, row1.length * 1.4)
+  const dur2 = row2 === LOADING_WORLD  ? 10 : Math.max(12, row2.length * 1.8)
+  const dur3 = row3 === LOADING_MOVERS ? 6  : Math.max(8,  row3.length * 1.0)
 
   return (
     <div

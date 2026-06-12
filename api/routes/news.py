@@ -11,7 +11,7 @@ from api.auth import verify_token
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["news"])
 
-_CACHE_TTL = 300  # 5 minutes
+_CACHE_TTL = 60  # 1 minute — near real-time
 _cache: list = []
 _cache_ts: float = 0.0
 _lock = threading.Lock()
@@ -176,6 +176,19 @@ def _get_cached() -> list[dict]:
         _build_cache()
     with _lock:
         return list(_cache)
+
+
+def _refresh_loop() -> None:
+    while True:
+        time.sleep(_CACHE_TTL)
+        try:
+            _build_cache()
+        except Exception as exc:
+            logger.debug("Background news refresh failed: %s", exc)
+
+
+_bg_thread = threading.Thread(target=_refresh_loop, daemon=True)
+_bg_thread.start()
 
 
 @router.get("/news/market")

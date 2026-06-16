@@ -118,22 +118,31 @@ function DriverCard({ driver }: { driver: DailyDriver }) {
 }
 
 export default function DailyDrivers() {
-  const { data, isLoading } = useQuery<DailyDriversResponse>({
+  const { data, isLoading, isError, refetch } = useQuery<DailyDriversResponse>({
     queryKey: ['daily-drivers'],
     queryFn: marketPulseApi.dailyDrivers,
     staleTime: 25 * 60 * 1000,
-    retry: 1,
+    retry: 2,
   })
+
+  const header = (
+    <div className="flex items-center gap-2 mb-3">
+      <span className="text-sm font-black" style={{ color: '#ffd700' }}>⚡</span>
+      <h2 className="text-sm font-bold uppercase tracking-wide" style={{ color: '#e2e8f0' }}>
+        Today's Top 3 Market Drivers
+      </h2>
+      {data?.as_of && (
+        <span className="text-xs ml-auto" style={{ color: '#334155' }}>
+          {data.as_of} · refreshes every 30min
+        </span>
+      )}
+    </div>
+  )
 
   if (isLoading) {
     return (
       <div>
-        <div className="flex items-center gap-2 mb-3">
-          <span className="text-sm font-black" style={{ color: '#ffd700' }}>⚡</span>
-          <h2 className="text-sm font-bold uppercase tracking-wide" style={{ color: '#e2e8f0' }}>
-            Today's Top 3 Market Drivers
-          </h2>
-        </div>
+        {header}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <DriverSkeleton /><DriverSkeleton /><DriverSkeleton />
         </div>
@@ -141,19 +150,32 @@ export default function DailyDrivers() {
     )
   }
 
-  if (!data?.drivers?.length) return null
+  if (isError || !data?.drivers?.length) {
+    return (
+      <div>
+        {header}
+        <div
+          className="rounded-xl border p-4 flex items-center justify-between"
+          style={{ backgroundColor: '#111827', borderColor: 'rgba(255,255,255,0.06)' }}
+        >
+          <span className="text-xs" style={{ color: '#475569' }}>
+            Market drivers unavailable — AI analysis will retry shortly
+          </span>
+          <button
+            onClick={() => refetch()}
+            className="text-xs font-semibold px-3 py-1.5 rounded-lg"
+            style={{ backgroundColor: 'rgba(0,212,255,0.1)', color: '#00d4ff' }}
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div>
-      <div className="flex items-center gap-2 mb-3">
-        <span className="text-sm font-black" style={{ color: '#ffd700' }}>⚡</span>
-        <h2 className="text-sm font-bold uppercase tracking-wide" style={{ color: '#e2e8f0' }}>
-          Today's Top 3 Market Drivers
-        </h2>
-        <span className="text-xs ml-auto" style={{ color: '#334155' }}>
-          {data.as_of} · refreshes every 30min
-        </span>
-      </div>
+      {header}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {data.drivers.map(d => <DriverCard key={d.rank} driver={d} />)}
       </div>

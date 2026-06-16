@@ -344,16 +344,18 @@ function DeepTabs({ data, period, onPeriodChange }: {
                 <h3 className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: '#475569' }}>Statistical Forecast</h3>
                 <div className="flex items-center gap-3 mb-3">
                   <span className="text-xl font-bold" style={{ color: '#e2e8f0' }}>{fmt.price(data.forecast.forecast_price)}</span>
-                  <span className="flex items-center gap-0.5 text-sm font-semibold" style={{ color: changeColor(data.forecast.forecast_change_pct) }}>
-                    {data.forecast.forecast_change_pct >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-                    {(Math.abs(data.forecast.forecast_change_pct)).toFixed(2)}%
-                  </span>
+                  {data.forecast.forecast_change_pct != null && (
+                    <span className="flex items-center gap-0.5 text-sm font-semibold" style={{ color: changeColor(data.forecast.forecast_change_pct) }}>
+                      {data.forecast.forecast_change_pct >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                      {(Math.abs(data.forecast.forecast_change_pct)).toFixed(2)}%
+                    </span>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                   {[
                     { label: 'Type', value: data.forecast.forecast_type },
-                    { label: 'Probability', value: data.forecast.probability.toFixed(1) + '%' },
-                    { label: 'Momentum', value: data.forecast.momentum.toFixed(2) },
+                    { label: 'Probability', value: data.forecast.probability != null ? data.forecast.probability.toFixed(1) + '%' : '—' },
+                    { label: 'Momentum', value: data.forecast.momentum != null ? data.forecast.momentum.toFixed(2) : '—' },
                     { label: 'Trend', value: data.forecast.trend },
                   ].map(({ label, value }) => (
                     <div key={label} className="rounded-lg p-2.5" style={{ backgroundColor: '#0a0e1a' }}>
@@ -637,7 +639,7 @@ export default function Analysis() {
                       style={{ backgroundColor: '#0a0e1a' }}>
                       <span style={{ color: '#475569' }}>AI Forecast</span>
                       <span className="font-bold" style={{ color: changeColor(fct.forecast_change_pct) }}>
-                        {fmt.price(fct.forecast_price)} ({fct.forecast_change_pct >= 0 ? '+' : ''}{fct.forecast_change_pct.toFixed(1)}%)
+                        {fmt.price(fct.forecast_price)}{fct.forecast_change_pct != null && ` (${fct.forecast_change_pct >= 0 ? '+' : ''}${fct.forecast_change_pct.toFixed(1)}%)`}
                       </span>
                     </div>
                   )}

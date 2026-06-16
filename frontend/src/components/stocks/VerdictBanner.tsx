@@ -50,7 +50,7 @@ function SignalPill({ name, detail }: { name: string; detail: VerdictResponse['s
       <span className="text-xs font-semibold" style={{ color: '#e2e8f0' }}>{signalKey(name)}</span>
       <span className="text-xs font-bold" style={{ color }}>{detail.label}</span>
       <span className="text-xs tabular-nums" style={{ color: '#475569' }}>
-        {detail.score} <span style={{ color: '#334155' }}>({(detail.weight * 100).toFixed(0)}%)</span>
+        {detail.score} <span style={{ color: '#334155' }}>({detail.weight != null ? (detail.weight * 100).toFixed(0) : '—'}%)</span>
       </span>
     </div>
   )

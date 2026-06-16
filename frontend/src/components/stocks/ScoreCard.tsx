@@ -74,7 +74,7 @@ export default function ScoreCard({ score }: ScoreCardProps) {
             <div key={key} className="flex flex-col gap-1">
               <div className="flex justify-between text-xs" style={{ color: '#94a3b8' }}>
                 <span>{key}</span>
-                <span>{val.toFixed(1)} / {max}</span>
+                <span>{val != null ? val.toFixed(1) : '—'} / {max}</span>
               </div>
               <div className="h-1.5 rounded-full" style={{ backgroundColor: '#1a2235' }}>
                 <div

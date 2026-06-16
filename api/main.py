@@ -13,7 +13,7 @@ import config  # triggers logging setup
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from api.routes import auth, stocks, screener, portfolio, reports, opportunities, market_pulse, ai_research, watchlist, penny_stocks, grades, alerts_route, news
 
@@ -109,14 +109,28 @@ async def health():
     return {"status": "ok", "version": "2.0"}
 
 
+@app.get("/api/bundle-version")
+async def bundle_version():
+    """Returns the current JS bundle hash so the frontend can detect stale loads."""
+    import glob
+    js_files = glob.glob(os.path.join(_DIST, "assets", "index-*.js"))
+    bundle = os.path.basename(js_files[0]) if js_files else "unknown"
+    return {"bundle": bundle}
+
+
 # Serve built React frontend — must be last so /api routes take priority
 if os.path.isdir(_DIST):
     app.mount("/assets", StaticFiles(directory=os.path.join(_DIST, "assets")), name="assets")
 
     @app.get("/{full_path:path}", include_in_schema=False)
     async def serve_spa(full_path: str):
-        # Serve known static files (favicon, icons, etc.) directly
         candidate = os.path.join(_DIST, full_path)
         if full_path and os.path.isfile(candidate):
             return FileResponse(candidate)
-        return FileResponse(os.path.join(_DIST, "index.html"))
+        with open(os.path.join(_DIST, "index.html"), "rb") as f:
+            content = f.read()
+        return Response(
+            content=content,
+            media_type="text/html",
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"},
+        )

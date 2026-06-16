@@ -321,11 +321,19 @@ class StockAnalyzer:
         info = data['info']
         hist = data['history']
         
-        current_price = hist['Close'].iloc[-1] if len(hist) > 0 else info.get('currentPrice', 0)
-        
+        # Use live price from info; fall back to last non-NaN close (today's bar is often NaN)
+        closes = hist['Close'].dropna() if len(hist) > 0 else None
+        current_price = (
+            info.get('currentPrice')
+            or info.get('regularMarketPrice')
+            or (float(closes.iloc[-1]) if closes is not None and len(closes) > 0 else None)
+            or 0
+        )
+
+        last_row_valid = len(hist) > 0 and not pd.isna(hist['Low'].iloc[-1]) and not pd.isna(hist['High'].iloc[-1])
         metrics = {
             'Current Price': current_price,
-            'Today Range': f"${hist['Low'].iloc[-1]:.2f} - ${hist['High'].iloc[-1]:.2f}" if len(hist) > 0 else "N/A",
+            'Today Range': f"${hist['Low'].iloc[-1]:.2f} - ${hist['High'].iloc[-1]:.2f}" if last_row_valid else "N/A",
             '52 Week Range': f"${info.get('fiftyTwoWeekLow', 0):.2f} - ${info.get('fiftyTwoWeekHigh', 0):.2f}",
             'Market Cap': info.get('marketCap', 0),
             'P/E Ratio': info.get('trailingPE', 0),

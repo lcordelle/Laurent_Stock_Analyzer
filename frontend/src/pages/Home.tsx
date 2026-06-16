@@ -8,6 +8,7 @@ import {
 import { marketPulseApi, opportunitiesApi } from '../services/api'
 import { fmt, scoreColor, changeColor } from '../lib/formatters'
 import PageWrapper from '../components/layout/PageWrapper'
+import DailyDrivers from '../components/dashboard/DailyDrivers'
 
 // ── Recently-analyzed ticker persistence ─────────────────────────────────────
 const RECENT_KEY = 'vf_recent_tickers'
@@ -274,6 +275,9 @@ export default function Home() {
             </div>
           </div>
         )}
+
+        {/* Top 3 daily market drivers — AI-ranked */}
+        <DailyDrivers />
 
         {/* Market sentiment from opportunities scan */}
         {opps && <SentimentPanel data={opps} />}

@@ -1,5 +1,7 @@
 import sys
 import os
+import json
+import math
 import asyncio
 import logging
 import time
@@ -11,9 +13,30 @@ import config  # triggers logging setup
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 from api.routes import auth, stocks, screener, portfolio, reports, opportunities, market_pulse, ai_research, watchlist, penny_stocks, grades, alerts_route, news
+
+
+def _scrub(obj):
+    """Recursively replace NaN/Inf floats with None so JSON serialization never fails."""
+    if isinstance(obj, float):
+        return None if (math.isnan(obj) or math.isinf(obj)) else obj
+    if isinstance(obj, dict):
+        return {k: _scrub(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_scrub(v) for v in obj]
+    return obj
+
+
+class _SafeJSONResponse(JSONResponse):
+    def render(self, content) -> bytes:
+        return json.dumps(
+            _scrub(content),
+            allow_nan=False,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
 
 _DIST = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend", "dist")
 
@@ -50,7 +73,8 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="VirtualFusion Stock Analyzer API", version="2.0", lifespan=lifespan)
+app = FastAPI(title="VirtualFusion Stock Analyzer API", version="2.0", lifespan=lifespan,
+             default_response_class=_SafeJSONResponse)
 
 app.add_middleware(
     CORSMiddleware,

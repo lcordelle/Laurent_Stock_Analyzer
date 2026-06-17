@@ -2,6 +2,13 @@ import { useQuery } from '@tanstack/react-query'
 import { marketPulseApi } from '../../services/api'
 import { useNavigate } from 'react-router-dom'
 
+interface MarketSummary {
+  bias: 'UP' | 'DOWN' | 'HOLD'
+  outlook: 'bullish' | 'bearish' | 'mixed' | 'neutral'
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW'
+  narrative: string
+}
+
 interface DailyDriver {
   rank: number
   type: string
@@ -13,34 +20,25 @@ interface DailyDriver {
 }
 
 interface DailyDriversResponse {
+  summary?: MarketSummary | null
   drivers: DailyDriver[]
   as_of: string
 }
 
 const TYPE_LABELS: Record<string, string> = {
-  earnings: 'Earnings',
-  macro: 'Macro',
-  fed: 'Fed',
-  rates: 'Rates',
-  geopolitical: 'Geopolitical',
-  technical: 'Technical',
-  sentiment: 'Sentiment',
+  earnings: 'Earnings', macro: 'Macro', fed: 'Fed', rates: 'Rates',
+  geopolitical: 'Geopolitical', technical: 'Technical', sentiment: 'Sentiment',
 }
 
-const DIRECTION_COLORS = {
-  bullish: '#00e676',
-  bearish: '#ff1744',
-  neutral: '#ffab00',
+const DIR_COLOR: Record<string, string> = {
+  bullish: '#00e676', bearish: '#ff1744', neutral: '#ffab00',
+  UP: '#00e676', DOWN: '#ff1744', HOLD: '#ffab00', mixed: '#ffab00',
 }
 
-const DIRECTION_LABELS = {
-  bullish: '▲ Bullish',
-  bearish: '▼ Bearish',
-  neutral: '◆ Neutral',
-}
-
-const RANK_LABELS = ['#1', '#2', '#3']
 const RANK_COLORS = ['#ffd700', '#c0c0c0', '#cd7f32']
+
+const BIAS_ICON: Record<string, string> = { UP: '▲', DOWN: '▼', HOLD: '◆' }
+const BIAS_LABEL: Record<string, string> = { UP: 'Market likely UP today', DOWN: 'Market likely DOWN today', HOLD: 'Mixed signals — hold cautious' }
 
 function DriverSkeleton() {
   return (
@@ -53,9 +51,78 @@ function DriverSkeleton() {
   )
 }
 
+function SummarySkeleton() {
+  return (
+    <div className="rounded-xl border p-5 mb-3 animate-pulse"
+      style={{ backgroundColor: '#111827', borderColor: 'rgba(255,255,255,0.06)' }}>
+      <div className="flex items-center gap-4">
+        <div className="h-10 w-10 rounded-lg" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }} />
+        <div className="flex-1 flex flex-col gap-2">
+          <div className="h-4 w-48 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }} />
+          <div className="h-3 w-full rounded" style={{ backgroundColor: 'rgba(255,255,255,0.04)' }} />
+          <div className="h-3 w-4/5 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.04)' }} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SummaryCard({ summary, as_of }: { summary: MarketSummary; as_of: string }) {
+  const color = DIR_COLOR[summary.bias] ?? '#ffab00'
+  const icon = BIAS_ICON[summary.bias] ?? '◆'
+  const label = BIAS_LABEL[summary.bias] ?? summary.bias
+
+  return (
+    <div
+      className="rounded-xl border p-5 mb-3"
+      style={{
+        backgroundColor: '#0d1520',
+        borderColor: `${color}40`,
+        background: `linear-gradient(135deg, ${color}10 0%, #0d1520 50%)`,
+      }}
+    >
+      <div className="flex items-start gap-4">
+        {/* Bias badge */}
+        <div
+          className="flex-shrink-0 w-14 h-14 rounded-xl flex flex-col items-center justify-center"
+          style={{ backgroundColor: `${color}18`, border: `1.5px solid ${color}50` }}
+        >
+          <span className="text-xl font-black leading-none" style={{ color }}>{icon}</span>
+          <span className="text-xs font-black mt-0.5" style={{ color }}>{summary.bias}</span>
+        </div>
+
+        {/* Text */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap mb-1.5">
+            <span className="text-sm font-black" style={{ color }}>{label}</span>
+            <span
+              className="text-xs font-bold px-2 py-0.5 rounded-full"
+              style={{ backgroundColor: `${color}15`, color }}
+            >
+              {summary.outlook.charAt(0).toUpperCase() + summary.outlook.slice(1)}
+            </span>
+            <span
+              className="text-xs font-semibold px-2 py-0.5 rounded-full"
+              style={{ backgroundColor: 'rgba(255,255,255,0.05)', color: '#64748b' }}
+            >
+              {summary.confidence} confidence
+            </span>
+            <span className="text-xs ml-auto" style={{ color: '#334155' }}>
+              {as_of} · refreshes every 30min
+            </span>
+          </div>
+          <p className="text-xs leading-relaxed" style={{ color: '#94a3b8' }}>
+            {summary.narrative}
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function DriverCard({ driver }: { driver: DailyDriver }) {
   const navigate = useNavigate()
-  const dirColor = DIRECTION_COLORS[driver.direction] ?? '#ffab00'
+  const dirColor = DIR_COLOR[driver.direction] ?? '#ffab00'
   const rankColor = RANK_COLORS[driver.rank - 1] ?? '#94a3b8'
   const typeLabel = TYPE_LABELS[driver.type] ?? driver.type
 
@@ -68,16 +135,13 @@ function DriverCard({ driver }: { driver: DailyDriver }) {
         background: `linear-gradient(135deg, ${dirColor}08, #111827 55%)`,
       }}
     >
-      {/* Header row */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="text-base font-black tabular-nums" style={{ color: rankColor }}>
-            {RANK_LABELS[driver.rank - 1]}
+            #{driver.rank}
           </span>
-          <span
-            className="text-xs font-semibold px-2 py-0.5 rounded-full"
-            style={{ backgroundColor: 'rgba(255,255,255,0.06)', color: '#94a3b8' }}
-          >
+          <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
+            style={{ backgroundColor: 'rgba(255,255,255,0.06)', color: '#94a3b8' }}>
             {typeLabel}
           </span>
         </div>
@@ -90,12 +154,11 @@ function DriverCard({ driver }: { driver: DailyDriver }) {
           )}
           <span className="text-xs font-bold px-2 py-0.5 rounded"
             style={{ backgroundColor: `${dirColor}15`, color: dirColor }}>
-            {DIRECTION_LABELS[driver.direction]}
+            {driver.direction === 'bullish' ? '▲ Bullish' : driver.direction === 'bearish' ? '▼ Bearish' : '◆ Neutral'}
           </span>
         </div>
       </div>
 
-      {/* Title */}
       <div className="text-sm font-bold leading-snug" style={{ color: '#e2e8f0' }}>
         {driver.title}
         {driver.ticker && (
@@ -109,7 +172,6 @@ function DriverCard({ driver }: { driver: DailyDriver }) {
         )}
       </div>
 
-      {/* Why */}
       <p className="text-xs leading-relaxed" style={{ color: '#64748b' }}>
         {driver.why}
       </p>
@@ -125,24 +187,20 @@ export default function DailyDrivers() {
     retry: 2,
   })
 
-  const header = (
+  const sectionHeader = (
     <div className="flex items-center gap-2 mb-3">
       <span className="text-sm font-black" style={{ color: '#ffd700' }}>⚡</span>
       <h2 className="text-sm font-bold uppercase tracking-wide" style={{ color: '#e2e8f0' }}>
-        Today's Top 3 Market Drivers
+        Today's Market Intelligence
       </h2>
-      {data?.as_of && (
-        <span className="text-xs ml-auto" style={{ color: '#334155' }}>
-          {data.as_of} · refreshes every 30min
-        </span>
-      )}
     </div>
   )
 
   if (isLoading) {
     return (
       <div>
-        {header}
+        {sectionHeader}
+        <SummarySkeleton />
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <DriverSkeleton /><DriverSkeleton /><DriverSkeleton />
         </div>
@@ -153,13 +211,13 @@ export default function DailyDrivers() {
   if (isError || !data?.drivers?.length) {
     return (
       <div>
-        {header}
+        {sectionHeader}
         <div
           className="rounded-xl border p-4 flex items-center justify-between"
           style={{ backgroundColor: '#111827', borderColor: 'rgba(255,255,255,0.06)' }}
         >
           <span className="text-xs" style={{ color: '#475569' }}>
-            Market drivers unavailable — AI analysis will retry shortly
+            Market intelligence unavailable — AI analysis will retry shortly
           </span>
           <button
             onClick={() => refetch()}
@@ -175,7 +233,8 @@ export default function DailyDrivers() {
 
   return (
     <div>
-      {header}
+      {sectionHeader}
+      {data.summary && <SummaryCard summary={data.summary} as_of={data.as_of} />}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {data.drivers.map(d => <DriverCard key={d.rank} driver={d} />)}
       </div>

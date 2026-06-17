@@ -208,8 +208,8 @@ def _get_top_headlines(n: int = 8) -> list[str]:
         return []
 
 
-def _call_llm_for_drivers(snapshot: dict, headlines: list[str], earnings_today: list[str]) -> list[dict]:
-    """Ask Claude (or Groq fallback) to identify the top 3 market-moving events."""
+def _call_llm_for_drivers(snapshot: dict, headlines: list[str], earnings_today: list[str]) -> dict:
+    """Ask LLM to produce daily market summary + top 3 drivers. Returns {"summary": {...}, "drivers": [...]}."""
     spy = snapshot.get("spy", {})
     vix = snapshot.get("vix", {})
     qqq = snapshot.get("qqq", {})
@@ -239,22 +239,32 @@ def _call_llm_for_drivers(snapshot: dict, headlines: list[str], earnings_today: 
     prompt = f"""Today's market data:
 {chr(10).join(context_lines)}
 
-Identify the TOP 3 single most influential events/factors that will drive market direction today.
-Rank them by impact. Each event must be distinct (no duplicates across earnings/macro/technical).
+You are a senior market analyst. Produce:
+1. A daily market outlook summary
+2. The top 3 most influential events/factors driving market direction today
 
-Respond with ONLY valid JSON — an array of exactly 3 objects:
-[
-  {{
-    "rank": 1,
-    "type": "earnings|macro|fed|rates|geopolitical|technical|sentiment",
-    "title": "concise event title (max 12 words)",
-    "direction": "bullish|bearish|neutral",
-    "impact": "HIGH|MEDIUM",
-    "why": "one sentence: why this moves markets today",
-    "ticker": "TICKER or null"
+Respond with ONLY a single valid JSON object (no markdown, no extra text):
+{{
+  "summary": {{
+    "bias": "UP|DOWN|HOLD",
+    "outlook": "bullish|bearish|mixed|neutral",
+    "confidence": "HIGH|MEDIUM|LOW",
+    "narrative": "2-3 sentences: overall market outlook for today, what traders should watch, and the key risk"
   }},
-  ...
-]"""
+  "drivers": [
+    {{
+      "rank": 1,
+      "type": "earnings|macro|fed|rates|geopolitical|technical|sentiment",
+      "title": "concise event title (max 12 words)",
+      "direction": "bullish|bearish|neutral",
+      "impact": "HIGH|MEDIUM",
+      "why": "one sentence: why this moves markets today",
+      "ticker": "TICKER or null"
+    }},
+    {{ "rank": 2, ... }},
+    {{ "rank": 3, ... }}
+  ]
+}}"""
 
     try:
         if os.getenv("ANTHROPIC_API_KEY"):
@@ -262,7 +272,7 @@ Respond with ONLY valid JSON — an array of exactly 3 objects:
             client = ant.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
             msg = client.messages.create(
                 model="claude-haiku-4-5-20251001",
-                max_tokens=512,
+                max_tokens=800,
                 system="You are a senior market analyst. Respond only with valid JSON.",
                 messages=[{"role": "user", "content": prompt}],
             )
@@ -276,19 +286,29 @@ Respond with ONLY valid JSON — an array of exactly 3 objects:
                     {"role": "system", "content": "You are a senior market analyst. Respond only with valid JSON."},
                     {"role": "user", "content": prompt},
                 ],
-                max_tokens=512,
+                max_tokens=800,
             )
             raw = resp.choices[0].message.content.strip()
         else:
-            return []
+            return {}
 
-        # Extract JSON array from response (handle markdown code fences)
         if "```" in raw:
             raw = raw.split("```")[1].lstrip("json").strip()
-        return json.loads(raw)
+        parsed = json.loads(raw)
+        # Handle LLMs that return a bare array instead of the expected object
+        if isinstance(parsed, list):
+            return {"drivers": parsed, "summary": None}
+        return parsed
     except Exception as e:
         logger.warning("Daily drivers LLM call failed: %s", e)
-        return []
+        return {}
+
+
+class MarketSummary(BaseModel):
+    bias: str           # UP | DOWN | HOLD
+    outlook: str        # bullish | bearish | mixed | neutral
+    confidence: str     # HIGH | MEDIUM | LOW
+    narrative: str
 
 
 class DailyDriver(BaseModel):
@@ -302,6 +322,7 @@ class DailyDriver(BaseModel):
 
 
 class DailyDriversResponse(BaseModel):
+    summary: Optional[MarketSummary] = None
     drivers: list[DailyDriver]
     as_of: str
 
@@ -319,10 +340,23 @@ async def get_daily_drivers(_: str = Depends(verify_token)):
         loop.run_in_executor(None, _get_top_headlines, 8),
     )
 
-    drivers_raw = await loop.run_in_executor(None, _call_llm_for_drivers, snapshot, headlines, earnings)
+    llm_result = await loop.run_in_executor(None, _call_llm_for_drivers, snapshot, headlines, earnings)
+
+    summary = None
+    raw_summary = llm_result.get("summary")
+    if isinstance(raw_summary, dict):
+        try:
+            summary = MarketSummary(
+                bias=raw_summary.get("bias", "HOLD"),
+                outlook=raw_summary.get("outlook", "neutral"),
+                confidence=raw_summary.get("confidence", "MEDIUM"),
+                narrative=raw_summary.get("narrative", ""),
+            )
+        except Exception:
+            pass
 
     drivers = []
-    for d in drivers_raw[:3]:
+    for d in (llm_result.get("drivers") or [])[:3]:
         try:
             drivers.append(DailyDriver(
                 rank=d["rank"],
@@ -336,7 +370,11 @@ async def get_daily_drivers(_: str = Depends(verify_token)):
         except Exception:
             pass
 
-    result = {"drivers": [d.model_dump() for d in drivers], "as_of": date.today().isoformat()}
+    result = {
+        "summary": summary.model_dump() if summary else None,
+        "drivers": [d.model_dump() for d in drivers],
+        "as_of": date.today().isoformat(),
+    }
 
     if drivers:
         _DRIVERS_CACHE = result

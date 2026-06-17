@@ -47,6 +47,7 @@ export const marketPulseApi = {
   get: () => api.get('/market-pulse').then(r => r.data),
   marketBreadth: () => api.get('/market-breadth').then(r => r.data),
   dailyDrivers: () => api.get('/daily-drivers').then(r => r.data),
+  refreshDrivers: () => api.post('/daily-drivers/refresh').then(r => r.data),
 }
 
 export const portfolioApi = {

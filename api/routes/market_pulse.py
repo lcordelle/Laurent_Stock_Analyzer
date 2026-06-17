@@ -4,7 +4,7 @@ import json
 import logging
 import os
 import time
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Optional
 import yfinance as yf
 from fastapi import APIRouter, Depends
@@ -149,7 +149,7 @@ async def market_breadth(_: str = Depends(verify_token)):
 
 _DRIVERS_CACHE: Optional[dict] = None
 _DRIVERS_CACHE_TS: float = 0.0
-_DRIVERS_CACHE_TTL = 1800  # 30 minutes
+_DRIVERS_CACHE_TTL = 1200  # 20 minutes
 
 # Major tickers to check for same-day earnings reports
 _EARNINGS_WATCHLIST = [
@@ -325,14 +325,11 @@ class DailyDriversResponse(BaseModel):
     summary: Optional[MarketSummary] = None
     drivers: list[DailyDriver]
     as_of: str
+    generated_at: str   # ISO timestamp of when the LLM was called
+    cache_ttl_min: int  # how often this refreshes (minutes)
 
 
-@router.get("/daily-drivers", response_model=DailyDriversResponse)
-async def get_daily_drivers(_: str = Depends(verify_token)):
-    global _DRIVERS_CACHE, _DRIVERS_CACHE_TS
-    if _DRIVERS_CACHE is not None and (time.time() - _DRIVERS_CACHE_TS) < _DRIVERS_CACHE_TTL:
-        return _DRIVERS_CACHE
-
+async def _build_drivers_response() -> dict:
     loop = asyncio.get_event_loop()
     snapshot, earnings, headlines = await asyncio.gather(
         loop.run_in_executor(None, _get_market_snapshot),
@@ -370,14 +367,35 @@ async def get_daily_drivers(_: str = Depends(verify_token)):
         except Exception:
             pass
 
-    result = {
+    return {
         "summary": summary.model_dump() if summary else None,
         "drivers": [d.model_dump() for d in drivers],
         "as_of": date.today().isoformat(),
-    }
+        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "cache_ttl_min": _DRIVERS_CACHE_TTL // 60,
+    }, bool(drivers)
 
-    if drivers:
+
+@router.get("/daily-drivers", response_model=DailyDriversResponse)
+async def get_daily_drivers(_: str = Depends(verify_token)):
+    global _DRIVERS_CACHE, _DRIVERS_CACHE_TS
+    if _DRIVERS_CACHE is not None and (time.time() - _DRIVERS_CACHE_TS) < _DRIVERS_CACHE_TTL:
+        return _DRIVERS_CACHE
+    result, has_drivers = await _build_drivers_response()
+    if has_drivers:
         _DRIVERS_CACHE = result
         _DRIVERS_CACHE_TS = time.time()
+    return result
 
+
+@router.post("/daily-drivers/refresh", response_model=DailyDriversResponse)
+async def refresh_daily_drivers(_: str = Depends(verify_token)):
+    """Force-clear the cache and regenerate with latest market data."""
+    global _DRIVERS_CACHE, _DRIVERS_CACHE_TS
+    _DRIVERS_CACHE = None
+    _DRIVERS_CACHE_TS = 0.0
+    result, has_drivers = await _build_drivers_response()
+    if has_drivers:
+        _DRIVERS_CACHE = result
+        _DRIVERS_CACHE_TS = time.time()
     return result

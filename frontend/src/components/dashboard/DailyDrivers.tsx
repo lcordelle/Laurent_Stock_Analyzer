@@ -1,6 +1,7 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { marketPulseApi } from '../../services/api'
 import { useNavigate } from 'react-router-dom'
+import { useState } from 'react'
 
 interface MarketSummary {
   bias: 'UP' | 'DOWN' | 'HOLD'
@@ -23,6 +24,8 @@ interface DailyDriversResponse {
   summary?: MarketSummary | null
   drivers: DailyDriver[]
   as_of: string
+  generated_at: string   // ISO UTC timestamp
+  cache_ttl_min: number
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -67,10 +70,27 @@ function SummarySkeleton() {
   )
 }
 
-function SummaryCard({ summary, as_of }: { summary: MarketSummary; as_of: string }) {
+function formatAge(isoUtc: string): string {
+  const generated = new Date(isoUtc)
+  const now = new Date()
+  const diffMin = Math.floor((now.getTime() - generated.getTime()) / 60000)
+  const localTime = generated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  if (diffMin < 1) return `Updated just now (${localTime})`
+  if (diffMin === 1) return `Updated 1 min ago (${localTime})`
+  return `Updated ${diffMin} min ago (${localTime})`
+}
+
+function SummaryCard({ summary, generated_at, cache_ttl_min, onRefresh, refreshing }: {
+  summary: MarketSummary
+  generated_at: string
+  cache_ttl_min: number
+  onRefresh: () => void
+  refreshing: boolean
+}) {
   const color = DIR_COLOR[summary.bias] ?? '#ffab00'
   const icon = BIAS_ICON[summary.bias] ?? '◆'
   const label = BIAS_LABEL[summary.bias] ?? summary.bias
+  const age = formatAge(generated_at)
 
   return (
     <div
@@ -95,21 +115,28 @@ function SummaryCard({ summary, as_of }: { summary: MarketSummary; as_of: string
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap mb-1.5">
             <span className="text-sm font-black" style={{ color }}>{label}</span>
-            <span
-              className="text-xs font-bold px-2 py-0.5 rounded-full"
-              style={{ backgroundColor: `${color}15`, color }}
-            >
+            <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+              style={{ backgroundColor: `${color}15`, color }}>
               {summary.outlook.charAt(0).toUpperCase() + summary.outlook.slice(1)}
             </span>
-            <span
-              className="text-xs font-semibold px-2 py-0.5 rounded-full"
-              style={{ backgroundColor: 'rgba(255,255,255,0.05)', color: '#64748b' }}
-            >
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
+              style={{ backgroundColor: 'rgba(255,255,255,0.05)', color: '#64748b' }}>
               {summary.confidence} confidence
             </span>
-            <span className="text-xs ml-auto" style={{ color: '#334155' }}>
-              {as_of} · refreshes every 30min
-            </span>
+            <div className="ml-auto flex items-center gap-2">
+              <span className="text-xs" style={{ color: '#334155' }}>
+                {age} · auto-refresh every {cache_ttl_min}min
+              </span>
+              <button
+                onClick={onRefresh}
+                disabled={refreshing}
+                className="text-xs font-semibold px-2 py-1 rounded-lg transition-opacity disabled:opacity-40"
+                style={{ backgroundColor: 'rgba(0,212,255,0.08)', color: '#00d4ff' }}
+                title="Force refresh with latest market data"
+              >
+                {refreshing ? '↻ …' : '↻ Now'}
+              </button>
+            </div>
           </div>
           <p className="text-xs leading-relaxed" style={{ color: '#94a3b8' }}>
             {summary.narrative}
@@ -180,12 +207,27 @@ function DriverCard({ driver }: { driver: DailyDriver }) {
 }
 
 export default function DailyDrivers() {
+  const queryClient = useQueryClient()
+  const [refreshing, setRefreshing] = useState(false)
+
   const { data, isLoading, isError, refetch } = useQuery<DailyDriversResponse>({
     queryKey: ['daily-drivers'],
     queryFn: marketPulseApi.dailyDrivers,
-    staleTime: 25 * 60 * 1000,
+    staleTime: 18 * 60 * 1000,  // slightly under 20min TTL so refetch fires before cache expires
     retry: 2,
   })
+
+  const handleForceRefresh = async () => {
+    setRefreshing(true)
+    try {
+      const fresh = await marketPulseApi.refreshDrivers()
+      queryClient.setQueryData(['daily-drivers'], fresh)
+    } catch {
+      refetch()
+    } finally {
+      setRefreshing(false)
+    }
+  }
 
   const sectionHeader = (
     <div className="flex items-center gap-2 mb-3">
@@ -220,11 +262,12 @@ export default function DailyDrivers() {
             Market intelligence unavailable — AI analysis will retry shortly
           </span>
           <button
-            onClick={() => refetch()}
-            className="text-xs font-semibold px-3 py-1.5 rounded-lg"
+            onClick={() => handleForceRefresh()}
+            disabled={refreshing}
+            className="text-xs font-semibold px-3 py-1.5 rounded-lg disabled:opacity-40"
             style={{ backgroundColor: 'rgba(0,212,255,0.1)', color: '#00d4ff' }}
           >
-            Retry
+            {refreshing ? 'Refreshing…' : 'Retry'}
           </button>
         </div>
       </div>
@@ -234,7 +277,15 @@ export default function DailyDrivers() {
   return (
     <div>
       {sectionHeader}
-      {data.summary && <SummaryCard summary={data.summary} as_of={data.as_of} />}
+      {data.summary && (
+        <SummaryCard
+          summary={data.summary}
+          generated_at={data.generated_at}
+          cache_ttl_min={data.cache_ttl_min}
+          onRefresh={handleForceRefresh}
+          refreshing={refreshing}
+        />
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {data.drivers.map(d => <DriverCard key={d.rank} driver={d} />)}
       </div>

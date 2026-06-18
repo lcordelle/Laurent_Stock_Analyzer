@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { marketPulseApi } from '../../services/api'
+import { marketPulseApi, newsApi } from '../../services/api'
+import type { NewsItem } from '../../services/api'
 import { useNavigate } from 'react-router-dom'
 import { useState } from 'react'
 
@@ -8,6 +9,8 @@ interface MarketSummary {
   outlook: 'bullish' | 'bearish' | 'mixed' | 'neutral'
   confidence: 'HIGH' | 'MEDIUM' | 'LOW'
   narrative: string
+  trading_guidance?: string
+  key_risk?: string
 }
 
 interface DailyDriver {
@@ -24,50 +27,27 @@ interface DailyDriversResponse {
   summary?: MarketSummary | null
   drivers: DailyDriver[]
   as_of: string
-  generated_at: string   // ISO UTC timestamp
+  generated_at: string
   cache_ttl_min: number
 }
 
 const TYPE_LABELS: Record<string, string> = {
   earnings: 'Earnings', macro: 'Macro', fed: 'Fed', rates: 'Rates',
-  geopolitical: 'Geopolitical', technical: 'Technical', sentiment: 'Sentiment',
+  geopolitical: 'Geo', technical: 'Technical', sentiment: 'Sentiment',
 }
-
 const DIR_COLOR: Record<string, string> = {
   bullish: '#00e676', bearish: '#ff1744', neutral: '#ffab00',
   UP: '#00e676', DOWN: '#ff1744', HOLD: '#ffab00', mixed: '#ffab00',
 }
-
 const RANK_COLORS = ['#ffd700', '#c0c0c0', '#cd7f32']
-
 const BIAS_ICON: Record<string, string> = { UP: '▲', DOWN: '▼', HOLD: '◆' }
-const BIAS_LABEL: Record<string, string> = { UP: 'Market likely UP today', DOWN: 'Market likely DOWN today', HOLD: 'Mixed signals — hold cautious' }
-
-function DriverSkeleton() {
-  return (
-    <div className="rounded-xl border p-4 flex flex-col gap-3 animate-pulse"
-      style={{ backgroundColor: '#111827', borderColor: 'rgba(255,255,255,0.06)' }}>
-      <div className="h-3 w-16 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }} />
-      <div className="h-4 w-full rounded" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }} />
-      <div className="h-3 w-5/6 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.04)' }} />
-    </div>
-  )
+const BIAS_LABEL: Record<string, string> = {
+  UP: 'Market likely UP today',
+  DOWN: 'Market likely DOWN today',
+  HOLD: 'Mixed signals — hold cautious',
 }
-
-function SummarySkeleton() {
-  return (
-    <div className="rounded-xl border p-5 mb-3 animate-pulse"
-      style={{ backgroundColor: '#111827', borderColor: 'rgba(255,255,255,0.06)' }}>
-      <div className="flex items-center gap-4">
-        <div className="h-10 w-10 rounded-lg" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }} />
-        <div className="flex-1 flex flex-col gap-2">
-          <div className="h-4 w-48 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }} />
-          <div className="h-3 w-full rounded" style={{ backgroundColor: 'rgba(255,255,255,0.04)' }} />
-          <div className="h-3 w-4/5 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.04)' }} />
-        </div>
-      </div>
-    </div>
-  )
+const SENT_COLOR: Record<string, string> = {
+  positive: '#00e676', negative: '#ff1744', neutral: '#ffab00',
 }
 
 function formatAge(isoUtc: string): string {
@@ -78,6 +58,33 @@ function formatAge(isoUtc: string): string {
   if (diffMin < 1) return `Updated just now (${localTime})`
   if (diffMin === 1) return `Updated 1 min ago (${localTime})`
   return `Updated ${diffMin} min ago (${localTime})`
+}
+
+function formatNewsAge(publishedAt: string): string {
+  if (!publishedAt) return ''
+  let date: Date
+  const ts = Number(publishedAt)
+  if (!isNaN(ts) && ts > 1_000_000_000) {
+    date = new Date(ts * 1000)
+  } else {
+    date = new Date(publishedAt)
+  }
+  if (isNaN(date.getTime())) return ''
+  const mins = Math.floor((Date.now() - date.getTime()) / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  return `${Math.floor(hrs / 24)}d ago`
+}
+
+function Skeleton({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return (
+    <div
+      className={`animate-pulse rounded ${className ?? ''}`}
+      style={{ backgroundColor: 'rgba(255,255,255,0.06)', ...style }}
+    />
+  )
 }
 
 function SummaryCard({ summary, generated_at, cache_ttl_min, onRefresh, refreshing }: {
@@ -94,15 +101,14 @@ function SummaryCard({ summary, generated_at, cache_ttl_min, onRefresh, refreshi
 
   return (
     <div
-      className="rounded-xl border p-5 mb-3"
+      className="rounded-xl border p-4"
       style={{
         backgroundColor: '#0d1520',
         borderColor: `${color}40`,
-        background: `linear-gradient(135deg, ${color}10 0%, #0d1520 50%)`,
+        background: `linear-gradient(135deg, ${color}10 0%, #0d1520 60%)`,
       }}
     >
-      <div className="flex items-start gap-4">
-        {/* Bias badge */}
+      <div className="flex items-start gap-3">
         <div
           className="flex-shrink-0 w-14 h-14 rounded-xl flex flex-col items-center justify-center"
           style={{ backgroundColor: `${color}18`, border: `1.5px solid ${color}50` }}
@@ -111,7 +117,6 @@ function SummaryCard({ summary, generated_at, cache_ttl_min, onRefresh, refreshi
           <span className="text-xs font-black mt-0.5" style={{ color }}>{summary.bias}</span>
         </div>
 
-        {/* Text */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap mb-1.5">
             <span className="text-sm font-black" style={{ color }}>{label}</span>
@@ -124,8 +129,8 @@ function SummaryCard({ summary, generated_at, cache_ttl_min, onRefresh, refreshi
               {summary.confidence} confidence
             </span>
             <div className="ml-auto flex items-center gap-2">
-              <span className="text-xs" style={{ color: '#334155' }}>
-                {age} · auto-refresh every {cache_ttl_min}min
+              <span className="text-xs hidden sm:inline" style={{ color: '#334155' }}>
+                {age} · auto-refresh {cache_ttl_min}min
               </span>
               <button
                 onClick={onRefresh}
@@ -138,10 +143,111 @@ function SummaryCard({ summary, generated_at, cache_ttl_min, onRefresh, refreshi
               </button>
             </div>
           </div>
+
           <p className="text-xs leading-relaxed" style={{ color: '#94a3b8' }}>
             {summary.narrative}
           </p>
+
+          {summary.trading_guidance && (
+            <div className="mt-2 pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+              <span className="text-xs font-bold uppercase tracking-wide" style={{ color: '#00d4ff' }}>
+                Trading Guidance
+              </span>
+              <p className="text-xs leading-relaxed mt-1" style={{ color: '#94a3b8' }}>
+                {summary.trading_guidance}
+              </p>
+            </div>
+          )}
+
+          {summary.key_risk && (
+            <div className="mt-2 flex items-start gap-1.5">
+              <span className="text-xs font-black shrink-0" style={{ color: '#ff1744' }}>⚠</span>
+              <p className="text-xs leading-relaxed" style={{ color: '#64748b' }}>
+                <span className="font-semibold" style={{ color: '#ff1744' }}>Key risk: </span>
+                {summary.key_risk}
+              </p>
+            </div>
+          )}
         </div>
+      </div>
+    </div>
+  )
+}
+
+function BreakingNewsPanel({ items, cachedAt }: { items?: NewsItem[]; cachedAt?: number }) {
+  if (!items || items.length === 0) return null
+
+  const sorted = [...items].sort((a, b) => {
+    if (a.market_mover && !b.market_mover) return -1
+    if (!a.market_mover && b.market_mover) return 1
+    return 0
+  }).slice(0, 10)
+
+  const cacheAge = cachedAt
+    ? Math.floor((Date.now() - cachedAt * 1000) / 60000)
+    : null
+
+  return (
+    <div
+      className="rounded-xl border overflow-hidden"
+      style={{ backgroundColor: '#0d1117', borderColor: 'rgba(255,255,255,0.06)' }}
+    >
+      <div
+        className="px-4 py-2.5 flex items-center justify-between border-b"
+        style={{ backgroundColor: '#111827', borderColor: 'rgba(255,255,255,0.06)' }}
+      >
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: '#ff1744' }} />
+          <span className="text-xs font-bold uppercase tracking-wide" style={{ color: '#e2e8f0' }}>
+            Breaking News
+          </span>
+        </div>
+        {cacheAge !== null && (
+          <span className="text-xs" style={{ color: '#334155' }}>
+            {cacheAge < 1 ? 'live' : `${cacheAge}m ago`}
+          </span>
+        )}
+      </div>
+
+      <div className="divide-y" style={{ borderColor: 'rgba(255,255,255,0.04)' }}>
+        {sorted.map((item, i) => {
+          const sentColor = SENT_COLOR[item.sentiment] ?? '#ffab00'
+          const age = formatNewsAge(item.published_at)
+          return (
+            <a
+              key={i}
+              href={item.url || '#'}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-start gap-2.5 px-4 py-2.5 hover:bg-white/[0.02] transition-colors block"
+              style={{ textDecoration: 'none' }}
+            >
+              <span
+                className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0"
+                style={{ backgroundColor: sentColor }}
+              />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium leading-snug" style={{ color: item.market_mover ? '#e2e8f0' : '#94a3b8' }}>
+                  {item.title}
+                  {item.market_mover && (
+                    <span className="ml-1 text-xs" style={{ color: '#ffd700' }}>★</span>
+                  )}
+                </p>
+                <div className="flex items-center gap-2 mt-1">
+                  <span
+                    className="text-xs px-1.5 py-0.5 rounded"
+                    style={{ backgroundColor: 'rgba(255,255,255,0.04)', color: '#475569' }}
+                  >
+                    {item.source}
+                  </span>
+                  {age && (
+                    <span className="text-xs" style={{ color: '#334155' }}>{age}</span>
+                  )}
+                </div>
+              </div>
+            </a>
+          )
+        })}
       </div>
     </div>
   )
@@ -167,20 +273,26 @@ function DriverCard({ driver }: { driver: DailyDriver }) {
           <span className="text-base font-black tabular-nums" style={{ color: rankColor }}>
             #{driver.rank}
           </span>
-          <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
-            style={{ backgroundColor: 'rgba(255,255,255,0.06)', color: '#94a3b8' }}>
+          <span
+            className="text-xs font-semibold px-2 py-0.5 rounded-full"
+            style={{ backgroundColor: 'rgba(255,255,255,0.06)', color: '#94a3b8' }}
+          >
             {typeLabel}
           </span>
         </div>
         <div className="flex items-center gap-1.5">
           {driver.impact === 'HIGH' && (
-            <span className="text-xs font-bold px-1.5 py-0.5 rounded"
-              style={{ backgroundColor: 'rgba(255,171,0,0.12)', color: '#ffab00' }}>
+            <span
+              className="text-xs font-bold px-1.5 py-0.5 rounded"
+              style={{ backgroundColor: 'rgba(255,171,0,0.12)', color: '#ffab00' }}
+            >
               HIGH
             </span>
           )}
-          <span className="text-xs font-bold px-2 py-0.5 rounded"
-            style={{ backgroundColor: `${dirColor}15`, color: dirColor }}>
+          <span
+            className="text-xs font-bold px-2 py-0.5 rounded"
+            style={{ backgroundColor: `${dirColor}15`, color: dirColor }}
+          >
             {driver.direction === 'bullish' ? '▲ Bullish' : driver.direction === 'bearish' ? '▼ Bearish' : '◆ Neutral'}
           </span>
         </div>
@@ -213,8 +325,15 @@ export default function DailyDrivers() {
   const { data, isLoading, isError, refetch } = useQuery<DailyDriversResponse>({
     queryKey: ['daily-drivers'],
     queryFn: marketPulseApi.dailyDrivers,
-    staleTime: 18 * 60 * 1000,  // slightly under 20min TTL so refetch fires before cache expires
+    staleTime: 14 * 60_000,
     retry: 2,
+  })
+
+  const { data: newsData } = useQuery<{ items: NewsItem[]; cached_at: number }>({
+    queryKey: ['news-market'],
+    queryFn: newsApi.market,
+    staleTime: 60_000,
+    refetchInterval: 90_000,
   })
 
   const handleForceRefresh = async () => {
@@ -242,9 +361,14 @@ export default function DailyDrivers() {
     return (
       <div>
         {sectionHeader}
-        <SummarySkeleton />
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <DriverSkeleton /><DriverSkeleton /><DriverSkeleton />
+        <div className="flex flex-col gap-3">
+          <Skeleton style={{ height: 120 }} />
+          <Skeleton style={{ height: 200 }} />
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <Skeleton style={{ height: 100 }} />
+            <Skeleton style={{ height: 100 }} />
+            <Skeleton style={{ height: 100 }} />
+          </div>
         </div>
       </div>
     )
@@ -270,6 +394,11 @@ export default function DailyDrivers() {
             {refreshing ? 'Refreshing…' : 'Retry'}
           </button>
         </div>
+        {newsData && (
+          <div className="mt-3">
+            <BreakingNewsPanel items={newsData.items} cachedAt={newsData.cached_at} />
+          </div>
+        )}
       </div>
     )
   }
@@ -277,17 +406,34 @@ export default function DailyDrivers() {
   return (
     <div>
       {sectionHeader}
+
       {data.summary && (
-        <SummaryCard
-          summary={data.summary}
-          generated_at={data.generated_at}
-          cache_ttl_min={data.cache_ttl_min}
-          onRefresh={handleForceRefresh}
-          refreshing={refreshing}
-        />
+        <div className="mb-3">
+          <SummaryCard
+            summary={data.summary}
+            generated_at={data.generated_at}
+            cache_ttl_min={data.cache_ttl_min}
+            onRefresh={handleForceRefresh}
+            refreshing={refreshing}
+          />
+        </div>
       )}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {data.drivers.map(d => <DriverCard key={d.rank} driver={d} />)}
+
+      {newsData && (
+        <div className="mb-3">
+          <BreakingNewsPanel items={newsData.items} cachedAt={newsData.cached_at} />
+        </div>
+      )}
+
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#475569' }}>
+            AI-Ranked Drivers
+          </span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {data.drivers.map(d => <DriverCard key={d.rank} driver={d} />)}
+        </div>
       </div>
     </div>
   )

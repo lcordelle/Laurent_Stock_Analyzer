@@ -149,7 +149,7 @@ async def market_breadth(_: str = Depends(verify_token)):
 
 _DRIVERS_CACHE: Optional[dict] = None
 _DRIVERS_CACHE_TS: float = 0.0
-_DRIVERS_CACHE_TTL = 1200  # 20 minutes
+_DRIVERS_CACHE_TTL = 900   # 15 minutes
 
 # Major tickers to check for same-day earnings reports
 _EARNINGS_WATCHLIST = [
@@ -236,12 +236,10 @@ def _call_llm_for_drivers(snapshot: dict, headlines: list[str], earnings_today: 
         for h in headlines:
             context_lines.append(f"  • {h}")
 
-    prompt = f"""Today's market data:
-{chr(10).join(context_lines)}
+    prompt = f"""You are a pre-market trading analyst writing a morning briefing for a trader about to open positions.
 
-You are a senior market analyst. Produce:
-1. A daily market outlook summary
-2. The top 3 most influential events/factors driving market direction today
+Today's live market data:
+{chr(10).join(context_lines)}
 
 Respond with ONLY a single valid JSON object (no markdown, no extra text):
 {{
@@ -249,7 +247,9 @@ Respond with ONLY a single valid JSON object (no markdown, no extra text):
     "bias": "UP|DOWN|HOLD",
     "outlook": "bullish|bearish|mixed|neutral",
     "confidence": "HIGH|MEDIUM|LOW",
-    "narrative": "2-3 sentences: overall market outlook for today, what traders should watch, and the key risk"
+    "narrative": "1-2 sentences: today's market tone and context",
+    "trading_guidance": "2-3 sentences: specific actionable guidance — which sectors or setups to favour, what to avoid, and the key catalysts to watch at specific times today if known",
+    "key_risk": "1 sentence: the single biggest tail risk or scheduled event that could reverse today's bias"
   }},
   "drivers": [
     {{
@@ -261,8 +261,8 @@ Respond with ONLY a single valid JSON object (no markdown, no extra text):
       "why": "one sentence: why this moves markets today",
       "ticker": "TICKER or null"
     }},
-    {{ "rank": 2, ... }},
-    {{ "rank": 3, ... }}
+    {{ "rank": 2, "type": "...", "title": "...", "direction": "...", "impact": "...", "why": "...", "ticker": null }},
+    {{ "rank": 3, "type": "...", "title": "...", "direction": "...", "impact": "...", "why": "...", "ticker": null }}
   ]
 }}"""
 
@@ -272,7 +272,7 @@ Respond with ONLY a single valid JSON object (no markdown, no extra text):
             client = ant.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
             msg = client.messages.create(
                 model="claude-haiku-4-5-20251001",
-                max_tokens=800,
+                max_tokens=1000,
                 system="You are a senior market analyst. Respond only with valid JSON.",
                 messages=[{"role": "user", "content": prompt}],
             )
@@ -286,7 +286,7 @@ Respond with ONLY a single valid JSON object (no markdown, no extra text):
                     {"role": "system", "content": "You are a senior market analyst. Respond only with valid JSON."},
                     {"role": "user", "content": prompt},
                 ],
-                max_tokens=800,
+                max_tokens=1000,
             )
             raw = resp.choices[0].message.content.strip()
         else:
@@ -309,6 +309,8 @@ class MarketSummary(BaseModel):
     outlook: str        # bullish | bearish | mixed | neutral
     confidence: str     # HIGH | MEDIUM | LOW
     narrative: str
+    trading_guidance: str = ""  # actionable: what to trade/avoid/watch today
+    key_risk: str = ""          # single biggest risk that could reverse the bias
 
 
 class DailyDriver(BaseModel):
@@ -348,6 +350,8 @@ async def _build_drivers_response() -> dict:
                 outlook=raw_summary.get("outlook", "neutral"),
                 confidence=raw_summary.get("confidence", "MEDIUM"),
                 narrative=raw_summary.get("narrative", ""),
+                trading_guidance=raw_summary.get("trading_guidance", ""),
+                key_risk=raw_summary.get("key_risk", ""),
             )
         except Exception:
             pass

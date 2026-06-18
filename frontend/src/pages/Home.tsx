@@ -185,7 +185,8 @@ export default function Home() {
   const { data: pulse } = useQuery<MarketPulse>({
     queryKey: ['market-pulse'],
     queryFn: () => marketPulseApi.get(),
-    staleTime: 3 * 60_000,
+    staleTime: 2 * 60_000,
+    refetchInterval: 2 * 60_000,
     retry: 1,
   })
 

@@ -1,6 +1,10 @@
+from __future__ import annotations
+
 import time
 import logging
 import threading
+from datetime import datetime, timezone, timedelta
+from email.utils import parsedate_to_datetime
 
 import feedparser
 import yfinance as yf
@@ -67,6 +71,49 @@ _MARKET_MOVER_WORDS = {
     # Recession signals
     "recession", "contraction", "slowdown", "growth",
 }
+
+
+_MAX_AGE_HOURS = 48
+
+
+def _parse_published_at(raw: str) -> datetime | None:
+    if not raw:
+        return None
+    # Unix timestamp (yfinance)
+    try:
+        ts = float(raw)
+        if ts > 1_000_000_000:
+            return datetime.fromtimestamp(ts, tz=timezone.utc)
+    except ValueError:
+        pass
+    # RFC 2822 (RSS)
+    try:
+        return parsedate_to_datetime(raw)
+    except Exception:
+        pass
+    # ISO 8601 fallback
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def _is_recent(raw: str, cutoff: datetime) -> bool:
+    dt = _parse_published_at(raw)
+    if dt is None:
+        return True  # keep items with unparseable dates rather than drop them
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt >= cutoff
+
+
+def _sort_key(item: dict) -> float:
+    dt = _parse_published_at(item.get("published_at", ""))
+    if dt is None:
+        return 0.0
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.timestamp()
 
 
 def _is_market_mover(title: str) -> bool:
@@ -157,9 +204,12 @@ def _build_cache() -> None:
 
     all_items.extend(_fetch_yf_news())
 
+    cutoff = datetime.now(tz=timezone.utc) - timedelta(hours=_MAX_AGE_HOURS)
+    recent = [item for item in all_items if _is_recent(item.get("published_at", ""), cutoff)]
+
     seen_titles: set[str] = set()
     deduped = []
-    for item in all_items:
+    for item in sorted(recent, key=_sort_key, reverse=True):
         key = item["title"].lower()[:60]
         if key not in seen_titles:
             seen_titles.add(key)
@@ -168,7 +218,11 @@ def _build_cache() -> None:
     with _lock:
         _cache = deduped
         _cache_ts = time.time()
-    logger.info("Market news cache refreshed: %d items", len(deduped))
+    logger.info(
+        "Market news cache refreshed: %d recent items (dropped %d old)",
+        len(deduped),
+        len(all_items) - len(recent),
+    )
 
 
 def _get_cached() -> list[dict]:

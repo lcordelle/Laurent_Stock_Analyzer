@@ -174,14 +174,40 @@ function SummaryCard({ summary, generated_at, cache_ttl_min, onRefresh, refreshi
   )
 }
 
+function parsePublishedAt(raw: string): number {
+  if (!raw) return 0
+  const ts = Number(raw)
+  if (!isNaN(ts) && ts > 1_000_000_000) return ts * 1000
+  const d = new Date(raw)
+  return isNaN(d.getTime()) ? 0 : d.getTime()
+}
+
 function BreakingNewsPanel({ items, cachedAt }: { items?: NewsItem[]; cachedAt?: number }) {
   if (!items || items.length === 0) return null
+  // (empty-after-filter check happens after sorted is computed below)
 
-  const sorted = [...items].sort((a, b) => {
-    if (a.market_mover && !b.market_mover) return -1
-    if (!a.market_mover && b.market_mover) return 1
-    return 0
+  const cutoff = Date.now() - 48 * 60 * 60 * 1000
+  const recent = items.filter(item => {
+    const ms = parsePublishedAt(item.published_at)
+    return ms === 0 || ms >= cutoff  // keep unparseable dates
+  })
+
+  const sorted = [...recent].sort((a, b) => {
+    // Market movers first within the same recency bucket, then sort by time
+    const tsDiff = parsePublishedAt(b.published_at) - parsePublishedAt(a.published_at)
+    if (Math.abs(tsDiff) < 30 * 60 * 1000) {
+      // within 30 min window — surface market movers first
+      if (a.market_mover && !b.market_mover) return -1
+      if (!a.market_mover && b.market_mover) return 1
+    }
+    return tsDiff
   }).slice(0, 10)
+
+  if (sorted.length === 0) return (
+    <div className="rounded-xl border p-4 text-center" style={{ backgroundColor: '#0d1117', borderColor: 'rgba(255,255,255,0.06)' }}>
+      <p className="text-xs" style={{ color: '#475569' }}>No news in the last 48 hours — feeds refreshing</p>
+    </div>
+  )
 
   const cacheAge = cachedAt
     ? Math.floor((Date.now() - cachedAt * 1000) / 60000)

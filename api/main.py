@@ -76,14 +76,18 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="VirtualFusion Stock Analyzer API", version="2.0", lifespan=lifespan,
              default_response_class=_SafeJSONResponse)
 
+_CORS_ORIGINS = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "http://localhost:3002",
+]
+_public_url = os.getenv("PUBLIC_URL", "").strip().rstrip("/")
+if _public_url:
+    _CORS_ORIGINS.append(_public_url)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "http://localhost:3002",
-        "https://laurent.ngrok.io",
-    ],
+    allow_origins=_CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

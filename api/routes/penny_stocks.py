@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from api.auth import verify_token
 from api.routes.opportunities import _quick_scan
+import config
 
 router = APIRouter(tags=["penny-stocks"])
 logger = logging.getLogger(__name__)
@@ -38,10 +39,10 @@ def _fetch_dynamic_universe() -> list[str]:
     """Pull up to 250 liquid US penny stocks from Yahoo Finance screener."""
     try:
         q = EquityQuery('and', [
-            EquityQuery('lt', ['eodprice', 5.0]),
-            EquityQuery('gt', ['eodprice', 0.1]),
-            EquityQuery('gt', ['avgdailyvol3m', 500_000]),
-            EquityQuery('gt', ['intradaymarketcap', 5_000_000]),
+            EquityQuery('lt', ['eodprice', config.PENNY_MAX_PRICE]),
+            EquityQuery('gt', ['eodprice', config.PENNY_MIN_PRICE]),
+            EquityQuery('gt', ['avgdailyvol3m', config.PENNY_MIN_VOLUME]),
+            EquityQuery('gt', ['intradaymarketcap', config.PENNY_MIN_MCAP]),
             EquityQuery('eq', ['region', 'us']),
         ])
         result = yf.screen(q, size=250, sortField='avgdailyvol3m', sortAsc=False)
@@ -140,9 +141,9 @@ def _penny_scan(ticker: str) -> Optional[dict]:
         return None
     price = result.get("price") or 999
     mcap = result.get("market_cap") or 0
-    if price >= 5.0:
+    if price >= config.PENNY_MAX_PRICE:
         return None
-    if mcap < 5_000_000:
+    if mcap < config.PENNY_MIN_MCAP:
         return None
     if not _is_buy(result):
         return None

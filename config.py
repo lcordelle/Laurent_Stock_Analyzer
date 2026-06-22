@@ -142,6 +142,17 @@ YF_TIMEOUT = 30  # seconds
 YF_MAX_RETRIES = 3
 YF_RETRY_DELAY = 2  # seconds
 
+# AI provider endpoints (overridable via env vars)
+GROQ_API_URL = os.environ.get("GROQ_API_URL", "https://api.groq.com/openai/v1")
+OLLAMA_API_URL = os.environ.get("OLLAMA_API_URL", "http://localhost:11434/v1")
+OLLAMA_TAGS_URL = os.environ.get("OLLAMA_TAGS_URL", "http://localhost:11434/api/tags")
+
+# Penny stock screener thresholds
+PENNY_MAX_PRICE = float(os.environ.get("PENNY_MAX_PRICE", "5.0"))
+PENNY_MIN_PRICE = float(os.environ.get("PENNY_MIN_PRICE", "0.1"))
+PENNY_MIN_VOLUME = int(os.environ.get("PENNY_MIN_VOLUME", "500000"))
+PENNY_MIN_MCAP = int(os.environ.get("PENNY_MIN_MCAP", "5000000"))
+
 # ===========================================
 # FEATURE FLAGS
 # ===========================================

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from api.auth import verify_token
 from api.models.responses import AiAnalystSections, AiAnalystReportResponse
+import config
 
 router = APIRouter(tags=["ai"])
 logger = logging.getLogger(__name__)
@@ -41,7 +42,7 @@ def _detect_provider() -> str | None:
         return "anthropic"
     try:
         import urllib.request
-        urllib.request.urlopen("http://localhost:11434/api/tags", timeout=1)
+        urllib.request.urlopen(config.OLLAMA_TAGS_URL, timeout=1)
         return "ollama"
     except Exception:
         pass
@@ -119,7 +120,7 @@ Rules:
 
 def _call_groq(system_prompt: str, model: str) -> str:
     from openai import OpenAI
-    client = OpenAI(api_key=os.getenv("GROQ_API_KEY"), base_url="https://api.groq.com/openai/v1")
+    client = OpenAI(api_key=os.getenv("GROQ_API_KEY"), base_url=config.GROQ_API_URL)
     resp = client.chat.completions.create(
         model=model, max_tokens=1000,
         messages=[
@@ -143,7 +144,7 @@ def _call_anthropic(system_prompt: str, model: str) -> str:
 
 def _call_ollama(system_prompt: str, model: str) -> str:
     from openai import OpenAI
-    client = OpenAI(api_key="ollama", base_url="http://localhost:11434/v1")
+    client = OpenAI(api_key="ollama", base_url=config.OLLAMA_API_URL)
     resp = client.chat.completions.create(
         model=model, max_tokens=1000,
         messages=[

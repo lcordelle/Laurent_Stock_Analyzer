@@ -11,9 +11,12 @@ Set AI_ANALYST_PROVIDER=groq|anthropic|ollama to force a specific backend.
 
 import os
 import re
+import sys
 from datetime import datetime
 
 import streamlit as st
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import config
 
 
 # ---------------------------------------------------------------------------
@@ -33,7 +36,7 @@ def _detect_provider():
     # Check if Ollama is running locally
     try:
         import urllib.request
-        urllib.request.urlopen("http://localhost:11434/api/tags", timeout=1)
+        urllib.request.urlopen(config.OLLAMA_TAGS_URL, timeout=1)
         return "ollama"
     except Exception:
         pass
@@ -157,7 +160,7 @@ def _call_groq(system_prompt, model):
     from openai import OpenAI
     client = OpenAI(
         api_key=os.getenv("GROQ_API_KEY"),
-        base_url="https://api.groq.com/openai/v1",
+        base_url=config.GROQ_API_URL,
     )
     response = client.chat.completions.create(
         model=model,
@@ -186,7 +189,7 @@ def _call_ollama(system_prompt, model):
     from openai import OpenAI
     client = OpenAI(
         api_key="ollama",
-        base_url="http://localhost:11434/v1",
+        base_url=config.OLLAMA_API_URL,
     )
     response = client.chat.completions.create(
         model=model,

@@ -10,6 +10,7 @@ import { fmt, scoreColor, changeColor } from '../lib/formatters'
 import PageWrapper from '../components/layout/PageWrapper'
 import CandlestickChart from '../components/charts/CandlestickChart'
 import ValuationTunnelChart from '../components/charts/ValuationTunnelChart'
+import DecisionPanel from '../components/stocks/DecisionPanel'
 import MetricsTable from '../components/stocks/MetricsTable'
 import NewsPanel from '../components/stocks/NewsPanel'
 import { AiResearch } from '../components/stocks/AiResearch'
@@ -590,6 +591,15 @@ export default function Analysis() {
             )}
 
             {/* ── Decision cockpit: verdict sidebar + chart ──────────────────── */}
+            {data.decision && (
+              <DecisionPanel
+                decision={data.decision}
+                entry={data.trading_signals?.optimal_entry ?? null}
+                stop={data.trading_signals?.stop_loss ?? null}
+                currentPrice={data.metrics?.current_price ?? data.ohlcv.at(-1)?.close ?? null}
+              />
+            )}
+
             <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-4" data-testid="stock-header">
 
               {/* Left: Verdict & trade panel */}

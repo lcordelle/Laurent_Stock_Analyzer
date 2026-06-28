@@ -40,6 +40,19 @@ export interface ValuationTunnel {
   horizon_days: number; k: number; drift_annual: number; sigma_annual: number
 }
 
+export interface DecisionFactor {
+  label: string; subscore: number | null; weight: number
+  contribution: number | null; detail: string
+}
+export interface Decision {
+  conviction: number
+  direction: 'Long' | 'Short' | 'Stand aside'
+  factors: DecisionFactor[]
+  regime: { label: string; vix: number | null; multiplier: number }
+  expected_value_r: number | null
+  rationale: string
+}
+
 export interface RiskProfile {
   volatility?: number
   var_5pct?: number
@@ -85,6 +98,7 @@ export interface FullStockAnalysis {
   ohlcv: OHLCVRow[]; metrics?: StockMetrics; score?: ScoreBreakdown
   forecast?: ForecastResult; indicators?: IndicatorData
   valuation_tunnel?: ValuationTunnel
+  decision?: Decision
   trading_signals?: {
     signal?: string; confidence?: number
     optimal_entry?: number; stop_loss?: number

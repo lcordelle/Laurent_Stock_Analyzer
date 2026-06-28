@@ -354,8 +354,8 @@ function DeepTabs({ data, period: _period, onPeriodChange: _onPeriodChange }: {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                   {[
                     { label: 'Type', value: data.forecast.forecast_type },
-                    { label: 'Probability', value: data.forecast.probability != null ? data.forecast.probability.toFixed(1) + '%' : '—' },
-                    { label: 'Momentum', value: data.forecast.momentum != null ? data.forecast.momentum.toFixed(2) : '—' },
+                    { label: 'Fundamental Confidence', value: data.forecast.probability != null ? data.forecast.probability.toFixed(1) + '%' : '—' },
+                    { label: 'Momentum', value: data.forecast.momentum != null ? (data.forecast.momentum >= 0 ? '+' : '') + data.forecast.momentum.toFixed(2) + '%' : '—' },
                     { label: 'Trend', value: data.forecast.trend },
                   ].map(({ label, value }) => (
                     <div key={label} className="rounded-lg p-2.5" style={{ backgroundColor: '#0a0e1a' }}>
@@ -503,16 +503,16 @@ export default function Analysis() {
                     )}
                   </>
                 )}
-                {data.is_stale && data.cached_at && (
+                {data.is_stale && (
                   <div
-                    title={`Live data unavailable (Alpha Vantage limit reached). Showing cached data from ${new Date(data.cached_at + 'Z').toLocaleString()}.`}
+                    title={data.cached_at ? `Live data unavailable (Alpha Vantage limit reached). Showing cached data from ${new Date(data.cached_at + 'Z').toLocaleString()}.` : 'Live data unavailable. Showing cached data.'}
                     className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold cursor-help"
                     style={{ backgroundColor: 'rgba(234,179,8,0.12)', color: '#fbbf24', border: '1px solid rgba(234,179,8,0.25)' }}
                   >
                     <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
                     </svg>
-                    Cached · {new Date(data.cached_at + 'Z').toLocaleDateString()}
+                    Cached{data.cached_at && ` · ${new Date(data.cached_at + 'Z').toLocaleDateString()}`}
                   </div>
                 )}
                 {ticker && (

@@ -395,7 +395,7 @@ export default function CandlestickChart({ ohlcv, indicators, valuationTunnel, t
         { key: 'sma_20' as const, color: '#ffab00', title: 'SMA20', width: 1 },
         { key: 'sma_50' as const, color: '#00d4ff', title: 'SMA50', width: 1 },
         { key: 'sma_200' as const, color: '#a78bfa', title: 'SMA200', width: 1 },
-        { key: 'vwap' as const, color: '#f472b6', title: 'VWAP', width: 1 },
+        { key: 'vwap' as const, color: '#f472b6', title: 'VWAP (20d)', width: 1 },
       ]
       for (const { key, color, title, width } of smaConfig) {
         const arr = indicators?.[key]

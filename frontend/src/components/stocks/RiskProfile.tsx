@@ -31,13 +31,13 @@ function metricCfg(rp: RiskProfileType): MetricCfg[] {
       label: 'Sharpe Ratio',
       value: rp.sharpe_ratio != null ? rp.sharpe_ratio.toFixed(2) : '—',
       color: rp.sharpe_ratio == null ? col.neutral : rp.sharpe_ratio > 1 ? col.green : rp.sharpe_ratio > 0 ? col.amber : col.red,
-      caption: 'Return per unit of total risk',
+      caption: 'Return per unit of total risk · assumes risk-free rate 4.3%',
     },
     {
       label: 'Sortino Ratio',
       value: rp.sortino_ratio != null ? rp.sortino_ratio.toFixed(2) : '—',
       color: rp.sortino_ratio == null ? col.neutral : rp.sortino_ratio > 1 ? col.green : rp.sortino_ratio > 0 ? col.amber : col.red,
-      caption: 'Return per unit of downside risk',
+      caption: 'Return per unit of downside risk · assumes risk-free rate 4.3%',
     },
     {
       label: 'VaR (5%)',

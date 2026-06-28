@@ -55,12 +55,18 @@ def hist_to_ohlcv(hist: pd.DataFrame, max_rows: int = 252) -> list[OHLCVRow]:
     df = hist.tail(max_rows).copy()
     rows = []
     for idx, row in df.iterrows():
+        o = row.get("Open")
+        h = row.get("High")
+        l = row.get("Low")
+        c = row.get("Close")
+        if not (pd.notna(o) and pd.notna(h) and pd.notna(l) and pd.notna(c)):
+            continue
         rows.append(OHLCVRow(
             date=idx.strftime("%Y-%m-%d") if hasattr(idx, "strftime") else str(idx),
-            open=float(row["Open"]) if pd.notna(row.get("Open")) else 0.0,
-            high=float(row["High"]) if pd.notna(row.get("High")) else 0.0,
-            low=float(row["Low"]) if pd.notna(row.get("Low")) else 0.0,
-            close=float(row["Close"]) if pd.notna(row.get("Close")) else 0.0,
+            open=float(o),
+            high=float(h),
+            low=float(l),
+            close=float(c),
             volume=float(row["Volume"]) if pd.notna(row.get("Volume")) else 0.0,
         ))
     return rows
@@ -463,10 +469,12 @@ def _compute_trading_signals(
             score -= 0.75   # Weekly and daily both overbought
 
     # Short interest amplifier
+    # short_interest_pct arrives as a fraction from yfinance (e.g. 0.15 = 15%)
     if short_interest_pct is not None:
-        if short_interest_pct > 15 and score > 0:
+        si_pct = short_interest_pct * 100  # convert to percentage for threshold comparisons
+        if si_pct > 15 and score > 0:
             score += 0.5    # High short float + buy = squeeze potential
-        elif short_interest_pct > 20 and score < 0:
+        elif si_pct > 20 and score < 0:
             score -= 0.3    # Institutional conviction on short side
 
     # News catalyst weight
@@ -577,10 +585,10 @@ def _compute_trading_signals(
     if adx_val is not None and adx_val > 20:   quality_pts += 1  # trend present (≥20)
     if adx_val is not None and adx_val > 30:   quality_pts += 1  # strong trend bonus (≥30)
     if obv_divergent:                           quality_pts += 1
-    if stoch_k is not None and ((stoch_k < 25 and score > 0) or (stoch_k > 75 and score < 0)): quality_pts += 1
+    if stoch_k is not None and ((stoch_k < 20 and score > 0) or (stoch_k > 80 and score < 0)): quality_pts += 1
     if sr.get("at_support") and score > 0:     quality_pts += 1
     if sr.get("at_resistance") and score < 0:  quality_pts += 1
-    if weekly_rsi_val is not None and ((weekly_rsi_val < 45 and score > 0) or (weekly_rsi_val > 55 and score < 0)): quality_pts += 1
+    if weekly_rsi_val is not None and ((weekly_rsi_val < 40 and score > 0) or (weekly_rsi_val > 60 and score < 0)): quality_pts += 1
     if rp.get("at_zone"):                       quality_pts += 1
     if recent_news_count >= 2:                  quality_pts += 1  # catalyst present (≥2 articles)
 
@@ -597,8 +605,8 @@ def _compute_trading_signals(
     if rsi is not None:
         if rsi <= rz_low: rsi_signal = "OVERSOLD"
         elif rsi >= rz_high: rsi_signal = "OVERBOUGHT"
-        elif rsi <= rz_low + 8: rsi_signal = "MILDLY OVERSOLD"
-        elif rsi >= rz_high - 8: rsi_signal = "MILDLY OVERBOUGHT"
+        elif rsi <= rz_low + 5: rsi_signal = "MILDLY OVERSOLD"
+        elif rsi >= rz_high - 5: rsi_signal = "MILDLY OVERBOUGHT"
         elif 40 <= rsi <= 60: rsi_signal = "NEUTRAL"
         else: rsi_signal = "NEUTRAL"
     else:
@@ -610,23 +618,50 @@ def _compute_trading_signals(
     else:
         macd_label = None
 
-    # Trend strength from SMA alignment
+    # Trend strength from SMA alignment, gated by ADX to avoid false strong-trend labels
     smas_above = sum(1 for s in [sma_20, sma_50, sma_200] if s is not None and current_price > s)
-    if smas_above == 3: trend_str = "STRONG UPTREND"
-    elif smas_above == 2: trend_str = "UPTREND"
-    elif smas_above == 1: trend_str = "MIXED"
-    elif all(s is not None for s in [sma_20, sma_50, sma_200]): trend_str = "DOWNTREND"
-    else: trend_str = "INSUFFICIENT DATA"
+    adx_strong = adx_val is not None and adx_val >= 25
+    adx_trending = adx_val is None or adx_val >= 20  # None means unknown; don't penalise
+    if smas_above == 3:
+        trend_str = "STRONG UPTREND" if adx_strong else ("WEAK UPTREND" if not adx_trending else "UPTREND")
+    elif smas_above == 2:
+        trend_str = "UPTREND"
+    elif smas_above == 1:
+        trend_str = "MIXED"
+    elif all(s is not None for s in [sma_20, sma_50, sma_200]):
+        trend_str = "STRONG DOWNTREND" if adx_strong else ("WEAK DOWNTREND" if not adx_trending else "DOWNTREND")
+    else:
+        trend_str = "INSUFFICIENT DATA"
 
     # Risk/reward ratio to TP1
     risk = abs(current_price - stop_loss)
     reward = abs(tp1 - current_price)
     rr_ratio = round(reward / risk, 2) if risk > 0 else None
 
+    # Optimal entry: prefer support/pullback for BUY, resistance/bounce for SELL
+    sr_support = sr.get("nearest_support")
+    sr_resistance = sr.get("nearest_resistance")
+    if "BUY" in signal_str:
+        if sr.get("at_resistance") and sr_support is not None and sr_support > stop_loss:
+            optimal_entry = round(sr_support, 2)
+        elif rsi is not None and rsi >= rz_high and atr is not None:
+            optimal_entry = round(max(current_price - 0.5 * atr, stop_loss + 0.01), 2)
+        else:
+            optimal_entry = round(current_price, 2)
+    elif "SELL" in signal_str:
+        if sr.get("at_support") and sr_resistance is not None:
+            optimal_entry = round(sr_resistance, 2)
+        elif rsi is not None and rsi <= rz_low and atr is not None:
+            optimal_entry = round(current_price + 0.5 * atr, 2)
+        else:
+            optimal_entry = round(current_price, 2)
+    else:
+        optimal_entry = round(current_price, 2)
+
     return TradingSignals(
         signal=signal_str,
         confidence=confidence,
-        optimal_entry=round(current_price, 2),
+        optimal_entry=optimal_entry,
         stop_loss=stop_loss,
         tp1=tp1,
         tp2=tp2,

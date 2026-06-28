@@ -54,7 +54,8 @@ def blended_annual_drift(closes, target_price, mid_last, reg_slope_daily,
 
     if len(closes) >= 21 and closes[-21] > 0:
         m = closes[-1] / closes[-21] - 1.0
-        comps["momentum"] = m * (252 / 20)
+        m = max(m, -0.99)
+        comps["momentum"] = (1 + m) ** (252 / 20) - 1
         used_w["momentum"] = weights["momentum"]
 
     total_w = sum(used_w.values()) or 1.0

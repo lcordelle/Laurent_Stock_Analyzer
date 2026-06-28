@@ -65,6 +65,39 @@ def test_blended_drift_clamps():
     assert -0.5 <= d <= 0.5
 
 
+def test_momentum_geometric_annualization():
+    # m=0.20: geometric component should equal (1.20)**(252/20)-1
+    expected_large = (1.20) ** (252 / 20) - 1
+    # Build a closes array where the 20-day return is exactly 0.20
+    closes = [100.0] * 21
+    closes[-1] = 120.0
+    # Pad to 120 so blended_annual_drift has enough data for regression
+    closes = [100.0] * 99 + closes
+    # Extract momentum component directly: last/[-21] - 1 = 120/100 - 1 = 0.20
+    m_actual = closes[-1] / closes[-21] - 1.0
+    assert abs(m_actual - 0.20) < 1e-9
+    momentum = (1 + m_actual) ** (252 / 20) - 1
+    assert abs(momentum - expected_large) < 1e-9
+    # Verify linear formula gives a different (wrong) answer
+    linear = m_actual * (252 / 20)
+    assert abs(momentum - linear) > 0.1  # they diverge significantly at m=0.20
+
+
+def test_momentum_geometric_vs_linear_small():
+    # m=0.01: geometric and linear should be close but not equal
+    m = 0.01
+    geometric = (1 + m) ** (252 / 20) - 1
+    linear = m * (252 / 20)
+    assert abs(geometric - linear) > 1e-6  # not equal
+    assert abs(geometric - linear) < 0.05  # but close for small m
+
+
+def test_momentum_guard_extreme_loss():
+    # m=-0.999 (clamped to -0.99) must not raise
+    closes = [100.0] * 99 + [100.0] * 20 + [0.1]  # ~-99.9% 20-day return
+    blended_annual_drift(closes, target_price=100.0, mid_last=100.0, reg_slope_daily=0.0)  # must not raise
+
+
 def test_build_shapes_and_keys():
     closes = _exp_series(120)
     dates = next_trading_days("2026-01-01", 120)

@@ -75,6 +75,20 @@ class IndicatorData(BaseModel):
     vwap: list[Optional[float]] = []
 
 
+class ValuationTunnel(BaseModel):
+    hist_mid: list[Optional[float]]
+    hist_upper: list[Optional[float]]
+    hist_lower: list[Optional[float]]
+    future_dates: list[str]
+    fc_mid: list[float]
+    fc_upper: list[float]
+    fc_lower: list[float]
+    horizon_days: int
+    k: float
+    drift_annual: float
+    sigma_annual: float
+
+
 class TradingSignals(BaseModel):
     signal: Optional[str] = None
     confidence: Optional[int] = None
@@ -164,6 +178,7 @@ class FullStockAnalysis(BaseModel):
     score: Optional[ScoreBreakdown] = None
     forecast: Optional[ForecastResult] = None
     indicators: Optional[IndicatorData] = None
+    valuation_tunnel: Optional["ValuationTunnel"] = None
     trading_signals: Optional[TradingSignals] = None
     risk_profile: Optional[RiskProfileData] = None
     news: list[NewsArticle] = []

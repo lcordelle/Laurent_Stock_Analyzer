@@ -14,10 +14,11 @@ from api.models.responses import (
     StockMetrics, ScoreBreakdown, ForecastResult,
     IndicatorData, TradingSignals, NewsArticle, AnalystRating, OHLCVRow,
     ShortInterestData, EarningsDate, RiskProfileData,
-    VerdictSignalDetail, VerdictResponse,
+    VerdictSignalDetail, VerdictResponse, ValuationTunnel,
 )
 from api.utils.verdict import _compute_verdict
 from utils.risk_analysis import RiskAnalyzer
+from utils.valuation_tunnel import build_valuation_tunnel
 from utils.stock_analyzer import StockAnalyzer
 from utils.news_market import NewsMarketData
 from utils.ratings_aggregator import RatingsAggregator
@@ -747,6 +748,23 @@ def _analyze_ticker(ticker: str, period: str) -> FullStockAnalysis:
     except Exception as e:
         logger.debug("Relative strength failed for %s: %s", ticker, e)
 
+    valuation_tunnel = None
+    try:
+        if hist is not None and len(hist) >= 30:
+            h = hist.tail(252)
+            tun = build_valuation_tunnel(
+                closes=[float(c) for c in h["Close"].tolist()],
+                dates=[
+                    idx.strftime("%Y-%m-%d") if hasattr(idx, "strftime") else str(idx)[:10]
+                    for idx in h.index
+                ],
+                target_price=raw_metrics.get("Target Price") if raw_metrics else None,
+            )
+            if tun:
+                valuation_tunnel = ValuationTunnel(**tun)
+    except Exception as e:
+        logger.debug("Valuation tunnel failed for %s: %s", ticker, e)
+
     return FullStockAnalysis(
         ticker=ticker,
         company_name=info.get("longName") or info.get("shortName"),
@@ -758,6 +776,7 @@ def _analyze_ticker(ticker: str, period: str) -> FullStockAnalysis:
         score=_build_score(raw_score) if raw_score else None,
         forecast=_build_forecast(raw_forecast),
         indicators=_build_indicators(hist_with_indicators) if hist_with_indicators is not None else None,
+        valuation_tunnel=valuation_tunnel,
         trading_signals=_compute_trading_signals(
             hist_with_indicators if hist_with_indicators is not None else hist,
             raw_metrics.get("Current Price") if raw_metrics else None,

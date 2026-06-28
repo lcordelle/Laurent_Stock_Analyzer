@@ -3,7 +3,7 @@ import {
   ResponsiveContainer, ComposedChart, Line, Bar,
   XAxis, YAxis, Tooltip, ReferenceLine, Cell
 } from 'recharts'
-import type { OHLCVRow, IndicatorData, FullStockAnalysis, EarningsDate } from '../../lib/types'
+import type { OHLCVRow, IndicatorData, FullStockAnalysis, EarningsDate, ValuationTunnel } from '../../lib/types'
 
 interface PatternMarker {
   date: string
@@ -15,6 +15,7 @@ interface PatternMarker {
 interface Props {
   ohlcv: OHLCVRow[]
   indicators?: IndicatorData
+  valuationTunnel?: ValuationTunnel
   tradingSignals?: FullStockAnalysis['trading_signals']
   earningsDates?: EarningsDate[]
   relativeStrength?: (number | null)[]
@@ -120,7 +121,7 @@ function computeMarkers(ohlcv: OHLCVRow[], ind: IndicatorData): SignalMarker[] {
     const prevHigh = Math.max(...wPrices)
     const prevHighRsi = wRsi[wPrices.indexOf(prevHigh)]
     if (price > prevHigh * (1 + MIN_PRICE_DIFF) && prevHighRsi != null && curr < prevHighRsi - MIN_RSI_DIFF) {
-      out.push({ time: ohlcv[i].date.slice(0, 10), position: 'aboveBar', color: '#ff9800', shape: 'circle', text: '↓', reasons: ['Bearish RSI divergence: price higher high, RSI lower high'] })
+      out.push({ time: ohlcv[i].date.slice(0, 10), position: 'aboveBar', color: '#ff9800', shape: 'arrowDown' as const, text: '↓', reasons: ['Bearish RSI divergence: price higher high, RSI lower high'] })
       i += Math.floor(WINDOW / 2)
       continue
     }
@@ -128,7 +129,7 @@ function computeMarkers(ohlcv: OHLCVRow[], ind: IndicatorData): SignalMarker[] {
     const prevLow = Math.min(...wPrices)
     const prevLowRsi = wRsi[wPrices.indexOf(prevLow)]
     if (price < prevLow * (1 - MIN_PRICE_DIFF) && prevLowRsi != null && curr > prevLowRsi + MIN_RSI_DIFF) {
-      out.push({ time: ohlcv[i].date.slice(0, 10), position: 'belowBar', color: '#ff9800', shape: 'circle', text: '↑', reasons: ['Bullish RSI divergence: price lower low, RSI higher low'] })
+      out.push({ time: ohlcv[i].date.slice(0, 10), position: 'belowBar', color: '#ff9800', shape: 'arrowUp' as const, text: '↑', reasons: ['Bullish RSI divergence: price lower low, RSI higher low'] })
       i += Math.floor(WINDOW / 2)
       continue
     }
@@ -137,7 +138,7 @@ function computeMarkers(ohlcv: OHLCVRow[], ind: IndicatorData): SignalMarker[] {
   return out
 }
 
-export default function CandlestickChart({ ohlcv, indicators, tradingSignals, earningsDates, relativeStrength, patterns, period, onPeriodChange }: Props) {
+export default function CandlestickChart({ ohlcv, indicators, valuationTunnel, tradingSignals, earningsDates, relativeStrength, patterns, period, onPeriodChange }: Props) {
   const mainRef = useRef<HTMLDivElement>(null)
   const volRef = useRef<HTMLDivElement>(null)
   const mainChartRef = useRef<import('lightweight-charts').IChartApi | null>(null)
@@ -147,6 +148,7 @@ export default function CandlestickChart({ ohlcv, indicators, tradingSignals, ea
   const [tooltip, setTooltip] = useState<TooltipData | null>(null)
   const [patternTooltip, setPatternTooltip] = useState<PatternTooltipData | null>(null)
   const [showRS, setShowRS] = useState(false)
+  const [showTunnel, setShowTunnel] = useState(true)
   const [earningsLines, setEarningsLines] = useState<{ x: number; color: string; beat: boolean | null | undefined; date: string }[]>([])
 
   // Build Recharts data for RSI / MACD panels
@@ -352,6 +354,40 @@ export default function CandlestickChart({ ohlcv, indicators, tradingSignals, ea
         bbLower.setData(toLine(indicators.bb_lower))
       }
 
+      // Valuation Tunnel — fair-value channel (history) + forecast cone (dashed)
+      if (showTunnel && valuationTunnel) {
+        const vt = valuationTunnel
+        const histLen = Math.min(vt.hist_mid.length, ohlcv.length)
+        const offset = ohlcv.length - histLen
+        type LinePt = { time: import('lightweight-charts').Time; value: number }
+        const mkHist = (arr: (number | null)[]): LinePt[] =>
+          arr.slice(0, histLen).map((v, i) => ({
+            time: ohlcv[offset + i].date.slice(0, 10) as import('lightweight-charts').Time,
+            value: v as number,
+          })).filter(d => d.value != null)
+        const mkFc = (arr: number[]): LinePt[] =>
+          arr.map((v, i) => ({ time: vt.future_dates[i] as import('lightweight-charts').Time, value: v }))
+
+        const BLUE = '#3b82f6'
+        const addLine = (color: string, width: 1 | 2, dashed: boolean, title: string) =>
+          mainChart.addLineSeries({
+            color, lineWidth: width,
+            lineStyle: dashed ? LineStyle.Dashed : LineStyle.Solid,
+            title, lastValueVisible: false, priceLineVisible: false,
+          })
+
+        addLine(BLUE + '40', 1, false, 'Tunnel Upper').setData(mkHist(vt.hist_upper))
+        addLine(BLUE + '40', 1, false, 'Tunnel Lower').setData(mkHist(vt.hist_lower))
+        addLine(BLUE + '99', 1, false, 'Fair Value').setData(mkHist(vt.hist_mid))
+        addLine(BLUE + '66', 1, true, 'Forecast Upper').setData(mkFc(vt.fc_upper))
+        addLine(BLUE + '66', 1, true, 'Forecast Lower').setData(mkFc(vt.fc_lower))
+        addLine(BLUE + 'cc', 2, true, 'Forecast').setData(mkFc(vt.fc_mid))
+
+        const lastT = ohlcv[ohlcv.length - 1].date.slice(0, 10) as import('lightweight-charts').Time
+        mainChart.addLineSeries({ color: '#64748b', lineWidth: 1, lineStyle: LineStyle.Dotted, lastValueVisible: false, priceLineVisible: false, title: 'now' })
+          .setData([{ time: lastT, value: ohlcv[ohlcv.length - 1].close }])
+      }
+
       // SMA + VWAP overlays
       const smaConfig = [
         { key: 'sma_20' as const, color: '#ffab00', title: 'SMA20', width: 1 },
@@ -477,7 +513,7 @@ export default function CandlestickChart({ ohlcv, indicators, tradingSignals, ea
             const x = mainChart.timeScale().timeToCoordinate(e.date.slice(0, 10) as import('lightweight-charts').Time)
             if (x === null) return null
             const color = e.beat === true ? '#00e676' : e.beat === false ? '#ff1744' : '#ffab00'
-            return { x, color, beat: e.beat, date: e.date.slice(0, 10) }
+            return { x: x as unknown as number, color, beat: e.beat, date: e.date.slice(0, 10) }
           })
           .filter((l): l is { x: number; color: string; beat: boolean | null | undefined; date: string } => l !== null)
         setEarningsLines(lines)
@@ -505,7 +541,7 @@ export default function CandlestickChart({ ohlcv, indicators, tradingSignals, ea
       mainChartRef.current = null
       volChartRef.current = null
     }
-  }, [ohlcv, indicators, tradingSignals, earningsDates, relativeStrength, patterns, showRS])
+  }, [ohlcv, indicators, valuationTunnel, tradingSignals, earningsDates, relativeStrength, patterns, showRS, showTunnel])
 
   const rsiLast = useMemo(() => {
     if (!indicators?.rsi) return null
@@ -572,6 +608,16 @@ export default function CandlestickChart({ ohlcv, indicators, tradingSignals, ea
             }}
           >
             RS
+          </button>
+          <button
+            onClick={() => setShowTunnel(s => !s)}
+            className="px-2.5 py-1 rounded text-xs font-semibold transition-colors"
+            style={{
+              backgroundColor: showTunnel ? '#3b82f6' : 'transparent',
+              color: showTunnel ? '#0a0e1a' : '#475569',
+            }}
+          >
+            TUN
           </button>
         </div>
       </div>
@@ -706,7 +752,7 @@ export default function CandlestickChart({ ohlcv, indicators, tradingSignals, ea
                 contentStyle={{ backgroundColor: '#1a2235', border: '1px solid #1a2235', borderRadius: 8, fontSize: 11 }}
                 labelStyle={{ color: '#475569' }}
                 itemStyle={{ color: '#00d4ff' }}
-                formatter={(v: number) => [v?.toFixed(1), 'RSI']}
+                formatter={(v) => [(v as number)?.toFixed(1), 'RSI']}
               />
               {/* Stock-specific reversal zones (solid) — override standard 30/70 (dashed) */}
               {tradingSignals?.rsi_reversal_zone_high != null
@@ -740,7 +786,7 @@ export default function CandlestickChart({ ohlcv, indicators, tradingSignals, ea
               <Tooltip
                 contentStyle={{ backgroundColor: '#1a2235', border: '1px solid #1a2235', borderRadius: 8, fontSize: 11 }}
                 labelStyle={{ color: '#475569' }}
-                formatter={(v: number, name: string) => [v?.toFixed(4), name]}
+                formatter={(v, name) => [(v as number)?.toFixed(4), name as string]}
               />
               <ReferenceLine y={0} stroke="#47556960" />
               <Bar dataKey="hist" isAnimationActive={false}>

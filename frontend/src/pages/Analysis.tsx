@@ -159,7 +159,7 @@ function computeTier(signal?: string | null, score?: number, confidence?: number
 }
 function computeWhyNow(
   score: number, signal?: string | null, rsi?: number | null, macd?: string | null,
-  momentum?: number | null, roe?: number | null, gm?: number | null,
+  momentum?: number | null, _roe?: number | null, gm?: number | null,
   rg?: number | null, upside?: number | null
 ): string {
   const sig = signal ?? ''; const r = rsi ?? 50
@@ -277,7 +277,7 @@ import VerdictBanner from '../components/stocks/VerdictBanner'
 
 type Tab = 'fundamentals' | 'earnings' | 'news' | 'ai' | 'valuation' | 'catalysts'
 
-function DeepTabs({ data, period, onPeriodChange }: {
+function DeepTabs({ data, period: _period, onPeriodChange: _onPeriodChange }: {
   data: FullStockAnalysis; period: string; onPeriodChange: (p: string) => void
 }) {
   const [tab, setTab] = useState<Tab>(() =>
@@ -825,6 +825,7 @@ export default function Analysis() {
                   <CandlestickChart
                     ohlcv={data.ohlcv}
                     indicators={data.indicators}
+                    valuationTunnel={data.valuation_tunnel}
                     tradingSignals={data.trading_signals}
                     earningsDates={data.earnings_dates}
                     relativeStrength={data.relative_strength}

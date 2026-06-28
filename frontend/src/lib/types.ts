@@ -33,6 +33,13 @@ export interface IndicatorData {
   obv?: (number|null)[]; vwap?: (number|null)[]
 }
 
+export interface ValuationTunnel {
+  hist_mid: (number|null)[]; hist_upper: (number|null)[]; hist_lower: (number|null)[]
+  future_dates: string[]
+  fc_mid: number[]; fc_upper: number[]; fc_lower: number[]
+  horizon_days: number; k: number; drift_annual: number; sigma_annual: number
+}
+
 export interface RiskProfile {
   volatility?: number
   var_5pct?: number
@@ -77,6 +84,7 @@ export interface FullStockAnalysis {
   industry?: string; description?: string
   ohlcv: OHLCVRow[]; metrics?: StockMetrics; score?: ScoreBreakdown
   forecast?: ForecastResult; indicators?: IndicatorData
+  valuation_tunnel?: ValuationTunnel
   trading_signals?: {
     signal?: string; confidence?: number
     optimal_entry?: number; stop_loss?: number

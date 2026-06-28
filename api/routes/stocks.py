@@ -474,7 +474,7 @@ def _compute_trading_signals(
         si_pct = short_interest_pct * 100  # convert to percentage for threshold comparisons
         if si_pct > 15 and score > 0:
             score += 0.5    # High short float + buy = squeeze potential
-        elif si_pct > 20 and score < 0:
+        if si_pct > 20 and score < 0:
             score -= 0.3    # Institutional conviction on short side
 
     # News catalyst weight
@@ -649,7 +649,7 @@ def _compute_trading_signals(
         else:
             optimal_entry = round(current_price, 2)
     elif "SELL" in signal_str:
-        if sr.get("at_support") and sr_resistance is not None:
+        if sr.get("at_support") and sr_resistance is not None and sr_resistance < stop_loss:
             optimal_entry = round(sr_resistance, 2)
         elif rsi is not None and rsi <= rz_low and atr is not None:
             optimal_entry = round(current_price + 0.5 * atr, 2)

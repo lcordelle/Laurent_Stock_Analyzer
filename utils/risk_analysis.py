@@ -9,6 +9,11 @@ from typing import Dict, Optional
 import warnings
 warnings.filterwarnings('ignore')
 
+try:
+    from config import RISK_FREE_RATE as _CONFIG_RF
+except ImportError:
+    _CONFIG_RF = 0.043
+
 class RiskAnalyzer:
     """Calculate various risk metrics"""
     
@@ -28,7 +33,7 @@ class RiskAnalyzer:
         var = self.calculate_var(returns, confidence)
         return returns[returns <= var].mean()
     
-    def calculate_sharpe_ratio(self, returns: pd.Series, risk_free_rate: float = 0.02) -> float:
+    def calculate_sharpe_ratio(self, returns: pd.Series, risk_free_rate: float = _CONFIG_RF) -> float:
         """Calculate Sharpe Ratio (annualized)"""
         if len(returns) == 0 or returns.std() == 0:
             return 0
@@ -42,24 +47,21 @@ class RiskAnalyzer:
         
         return (mean_return - risk_free_rate) / std_return
     
-    def calculate_sortino_ratio(self, returns: pd.Series, risk_free_rate: float = 0.02) -> float:
-        """Calculate Sortino Ratio (downside deviation only)"""
+    def calculate_sortino_ratio(self, returns: pd.Series, risk_free_rate: float = _CONFIG_RF) -> float:
+        """Calculate Sortino Ratio using canonical target semi-deviation around zero."""
         if len(returns) == 0:
             return 0
-        
-        # Calculate downside returns only
-        downside_returns = returns[returns < 0]
-        if len(downside_returns) == 0:
-            return float('inf') if returns.mean() > 0 else 0
-        
-        # Annualize
+
         mean_return = returns.mean() * 252
-        downside_std = downside_returns.std() * np.sqrt(252)
-        
-        if downside_std == 0:
-            return 0
-        
-        return (mean_return - risk_free_rate) / downside_std
+
+        # Downside deviation: RMS of min(r, 0) over ALL observations, annualised.
+        # Using the full series (not just negative-return subset) prevents understating risk.
+        downside_dev = np.sqrt(np.mean(np.minimum(returns, 0) ** 2)) * np.sqrt(252)
+
+        if downside_dev == 0:
+            return float('inf') if mean_return > risk_free_rate else 0
+
+        return (mean_return - risk_free_rate) / downside_dev
     
     def calculate_max_drawdown(self, prices: pd.Series) -> Dict:
         """Calculate Maximum Drawdown"""

@@ -1,6 +1,8 @@
 # VirtualFusion Stock Analyzer Pro - Configuration File
 # Customize application behavior and settings
 
+import os
+
 # ===========================================
 # APPLICATION SETTINGS
 # ===========================================
@@ -132,6 +134,14 @@ SCREENER_DEFAULTS = {
     'revenue_growth_min': 0,
     'market_cap_min': 1000000  # 1 Million
 }
+
+# ===========================================
+# RISK METRICS
+# ===========================================
+
+# Annualised risk-free rate used for Sharpe and Sortino ratios.
+# Approximates the US 3-month T-Bill yield as of mid-2025; update periodically.
+RISK_FREE_RATE = 0.043  # 4.3 %
 
 # ===========================================
 # API SETTINGS

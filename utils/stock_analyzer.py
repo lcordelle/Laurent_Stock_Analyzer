@@ -195,7 +195,7 @@ class StockAnalyzer:
         
         info = data['info']
         score = 0
-        max_score = 100
+        max_score = sum(_cfg.SCORE_WEIGHTS.values())
         components = {}
 
         # Per-component caps driven by config.SCORE_WEIGHTS (single source of truth)
@@ -451,20 +451,18 @@ class StockAnalyzer:
             hist['DM_Plus_Smooth'] = hist['DM_Plus'].ewm(alpha=1/14, adjust=False, min_periods=14).mean()
             hist['DM_Minus_Smooth'] = hist['DM_Minus'].ewm(alpha=1/14, adjust=False, min_periods=14).mean()
 
-            # +DI and -DI
-            hist['DI_Plus'] = 100 * (hist['DM_Plus_Smooth'] / hist['TR_Smooth'])
-            hist['DI_Minus'] = 100 * (hist['DM_Minus_Smooth'] / hist['TR_Smooth'])
+            # +DI and -DI — NaN during warmup (TR_Smooth NaN); 0 when TR_Smooth==0 (flat series)
+            tr_s = hist['TR_Smooth']
+            hist['DI_Plus'] = np.where(tr_s == 0, 0.0, 100 * hist['DM_Plus_Smooth'] / tr_s)
+            hist['DI_Minus'] = np.where(tr_s == 0, 0.0, 100 * hist['DM_Minus_Smooth'] / tr_s)
 
-            # DX — guard divide-by-zero where (+DI + -DI) == 0
+            # DX — NaN during warmup (di_sum is NaN); 0 only when di_sum==0 (flat series)
             di_sum = hist['DI_Plus'] + hist['DI_Minus']
-            hist['DX'] = np.where(
-                di_sum != 0,
-                100 * abs(hist['DI_Plus'] - hist['DI_Minus']) / di_sum,
-                0
-            )
+            dx = 100 * abs(hist['DI_Plus'] - hist['DI_Minus']) / di_sum
+            hist['DX'] = np.where(di_sum == 0, 0, dx)
 
-            # ADX = Wilder-smoothed DX
-            hist['ADX'] = pd.Series(hist['DX'], index=hist.index).ewm(alpha=1/14, adjust=False).mean()
+            # ADX = Wilder-smoothed DX; min_periods=14 keeps ADX NaN during warmup
+            hist['ADX'] = pd.Series(hist['DX'], index=hist.index).ewm(alpha=1/14, adjust=False, min_periods=14).mean()
         
         # Ichimoku Cloud
         if len(hist) >= 52:

@@ -61,28 +61,34 @@ class TestRSI:
         assert (rsi >= 0).all() and (rsi <= 100).all(), "RSI out of [0,100]"
 
     def test_rsi_differs_from_sma_on_mixed_series(self):
-        """Wilder's EWM should diverge from plain SMA on a mixed gain/loss series."""
-        # Zigzag series: gains and losses, so EWM and SMA diverge
+        """Production RSI (Wilder EWM) should match a reference Wilder RSI and diverge from SMA RSI."""
         rng = np.random.default_rng(0)
         closes = 100 + np.cumsum(rng.choice([-2, 3, -1, 2], size=60))
+        hist = _make_hist(closes)
+        result = _run_indicators(hist)
+
+        # Reference Wilder RSI (same formula as production)
         delta = pd.Series(closes.astype(float)).diff()
+        gain_ref = delta.where(delta > 0, 0).ewm(alpha=1/14, adjust=False, min_periods=14).mean()
+        loss_ref = (-delta.where(delta < 0, 0)).ewm(alpha=1/14, adjust=False, min_periods=14).mean()
+        rsi_ref = (100 - 100 / (1 + gain_ref / loss_ref))
 
-        # EWM (Wilder) version
-        gain_ewm = delta.where(delta > 0, 0).ewm(alpha=1/14, adjust=False, min_periods=14).mean()
-        loss_ewm = (-delta.where(delta < 0, 0)).ewm(alpha=1/14, adjust=False, min_periods=14).mean()
-        rs_ewm = gain_ewm / loss_ewm
-        rsi_ewm = (100 - 100 / (1 + rs_ewm)).dropna()
+        prod_rsi = result['RSI'].reset_index(drop=True)
+        rsi_ref = rsi_ref.reset_index(drop=True)
+        mask = prod_rsi.notna() & rsi_ref.notna()
+        np.testing.assert_allclose(
+            prod_rsi[mask].values, rsi_ref[mask].values, atol=1e-8,
+            err_msg="Production RSI does not match Wilder reference"
+        )
 
-        # SMA (old) version
+        # Also confirm production diverges from plain SMA RSI on at least one post-warmup bar
         gain_sma = delta.where(delta > 0, 0).rolling(14).mean()
         loss_sma = (-delta.where(delta < 0, 0)).rolling(14).mean()
-        rs_sma = gain_sma / loss_sma
-        rsi_sma = (100 - 100 / (1 + rs_sma)).dropna()
-
-        # The two methods should differ at some bar after warmup
-        diffs = (rsi_ewm - rsi_sma).dropna().abs()
+        rsi_sma = (100 - 100 / (1 + gain_sma / loss_sma)).reset_index(drop=True)
+        post_warmup = mask & rsi_sma.notna()
+        diffs = (prod_rsi[post_warmup] - rsi_sma[post_warmup]).abs()
         assert diffs.max() > 0.01, \
-            f"EWM and SMA RSI should differ; max diff was {diffs.max():.4f}"
+            f"Production RSI should differ from SMA RSI; max diff was {diffs.max():.4f}"
 
 
 # ---------------------------------------------------------------------------
@@ -136,14 +142,17 @@ class TestADX:
         assert adx.iloc[28:].notna().all(), "ADX contains NaN after warmup period"
 
     def test_adx_flat_series_no_nan(self):
-        """Flat series — DI sum is 0, guard prevents NaN/inf in DX."""
+        """Flat series — DI sum is 0, guard prevents NaN/inf in DX; post-warmup ADX is 0."""
         closes = np.full(60, 100.0)
         highs = np.full(60, 100.0)
         lows = np.full(60, 100.0)
         result = _run_indicators(_make_hist(closes, highs=highs, lows=lows))
         dx = result['DX']
-        assert not np.any(np.isinf(dx.fillna(0).values)), "DX contains inf on flat series"
-        assert not np.any(np.isnan(dx.fillna(0).values)), "DX contains unexpected NaN"
+        assert not np.any(np.isinf(dx.values)), "DX contains inf on flat series"
+        # Post-warmup ADX on a flat series must be exactly 0 (finite), not NaN
+        adx_post = result['ADX'].iloc[28:]
+        assert adx_post.notna().all(), "ADX contains NaN after warmup on flat series"
+        assert np.allclose(adx_post.values, 0.0), "ADX on flat series should be 0 post-warmup"
 
 
 # ---------------------------------------------------------------------------

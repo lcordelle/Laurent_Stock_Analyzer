@@ -62,12 +62,6 @@ function cacheAge(ts?: number): string {
   return `${mins}m ago`
 }
 
-function mcapLabel(n?: number): string {
-  if (n == null) return '—'
-  if (n >= 1e9) return `$${(n / 1e9).toFixed(1)}B`
-  if (n >= 1e6) return `$${(n / 1e6).toFixed(0)}M`
-  return `$${n.toLocaleString()}`
-}
 
 type SortKey = 'combined_score' | 'vf_score' | 'price' | 'confidence' | 'rsi' | 'analyst_upside'
 
@@ -196,7 +190,7 @@ export default function PennyStocks() {
         {isLoading && (
           <div className="rounded-xl border p-16 flex flex-col items-center gap-3" style={{ backgroundColor: '#111827', borderColor: 'rgba(255,255,255,0.06)' }}>
             <Loader2 className="w-8 h-8 animate-spin" style={{ color: '#ffab00' }} />
-            <p className="text-sm" style={{ color: '#94a3b8' }}>Scanning {data?.total_scanned ?? 150}+ penny stocks for buy signals…</p>
+            <p className="text-sm" style={{ color: '#94a3b8' }}>Scanning {(data as PennyStocksResponse | undefined)?.total_scanned ?? 150}+ penny stocks for buy signals…</p>
             <p className="text-xs" style={{ color: '#475569' }}>This takes 2–3 minutes on first load</p>
           </div>
         )}

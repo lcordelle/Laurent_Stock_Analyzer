@@ -25,10 +25,9 @@ function KPITile({ label, value, borderColor }: KPITileProps) {
 
 interface KPIStripProps {
   metrics: StockMetrics
-  forecast?: ForecastResult
 }
 
-export default function KPIStrip({ metrics, forecast }: KPIStripProps) {
+export default function KPIStrip({ metrics }: KPIStripProps) {
   const tiles = [
     {
       label: 'Current Price',

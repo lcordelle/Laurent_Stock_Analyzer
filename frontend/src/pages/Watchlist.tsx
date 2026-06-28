@@ -268,7 +268,6 @@ export default function Watchlist() {
   // Seed portfolio on first visit
   seedPortfolioIfEmpty()
 
-  const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<Tab>('watching')
   const [showExplainer, setShowExplainer] = useState(true)
 

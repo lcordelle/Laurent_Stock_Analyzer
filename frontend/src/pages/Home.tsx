@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
-  Search, BarChart2, Filter, Zap, Target,
+  Search, BarChart2, Zap, Target,
   TrendingUp, TrendingDown, Briefcase, FileText, Clock, Activity
 } from 'lucide-react'
 import { marketPulseApi, opportunitiesApi } from '../services/api'

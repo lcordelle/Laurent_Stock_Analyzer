@@ -67,10 +67,8 @@ export default function Alerts() {
   const fired = alerts.filter(a => a.fired)
   const conditionLabels: Record<string, string> = data?.condition_labels || CONDITION_LABELS
 
-  const hasTelegram = true  // backend will log if not configured
-
   return (
-    <PageWrapper title="Alerts">
+    <PageWrapper>
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold mb-1" style={{ color: '#e2e8f0' }}>Price & Signal Alerts</h1>

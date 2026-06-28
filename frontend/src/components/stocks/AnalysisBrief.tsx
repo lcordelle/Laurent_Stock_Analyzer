@@ -49,7 +49,7 @@ function computeConvictionTier(signal?: string | null, score?: number, confidenc
 
 function computeWhyNow(
   score: number, signal?: string | null, rsi?: number | null, macd?: string | null,
-  momentum?: number | null, roe?: number | null, gm?: number | null,
+  momentum?: number | null, _roe?: number | null, gm?: number | null,
   rg?: number | null, upside?: number | null
 ): string {
   const sig = signal ?? ''

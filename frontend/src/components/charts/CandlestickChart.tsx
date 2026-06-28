@@ -148,7 +148,7 @@ export default function CandlestickChart({ ohlcv, indicators, valuationTunnel, t
   const [tooltip, setTooltip] = useState<TooltipData | null>(null)
   const [patternTooltip, setPatternTooltip] = useState<PatternTooltipData | null>(null)
   const [showRS, setShowRS] = useState(false)
-  const [showTunnel, setShowTunnel] = useState(true)
+  const [showTunnel, setShowTunnel] = useState(false)
   const [earningsLines, setEarningsLines] = useState<{ x: number; color: string; beat: boolean | null | undefined; date: string }[]>([])
 
   // Build Recharts data for RSI / MACD panels

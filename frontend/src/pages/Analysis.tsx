@@ -9,6 +9,7 @@ import type { FullStockAnalysis } from '../lib/types'
 import { fmt, scoreColor, changeColor } from '../lib/formatters'
 import PageWrapper from '../components/layout/PageWrapper'
 import CandlestickChart from '../components/charts/CandlestickChart'
+import ValuationTunnelChart from '../components/charts/ValuationTunnelChart'
 import MetricsTable from '../components/stocks/MetricsTable'
 import NewsPanel from '../components/stocks/NewsPanel'
 import { AiResearch } from '../components/stocks/AiResearch'
@@ -835,6 +836,26 @@ export default function Analysis() {
                 )}
               </div>
             </div>
+
+            {/* ── Valuation Tunnel ───────────────────────────────────────────── */}
+            {data.valuation_tunnel && (
+              <div className="rounded-xl border p-5 flex flex-col gap-3"
+                style={{ backgroundColor: '#111827', borderColor: 'rgba(255,255,255,0.06)' }}>
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#475569' }}>
+                    Valuation Tunnel
+                  </h3>
+                  <p className="text-xs mt-0.5" style={{ color: '#334155' }}>
+                    Fair-value channel &amp; {data.valuation_tunnel.horizon_days}-day forecast cone
+                  </p>
+                </div>
+                <ValuationTunnelChart
+                  ohlcv={data.ohlcv}
+                  tunnel={data.valuation_tunnel}
+                  currentPrice={data.metrics?.current_price ?? data.ohlcv.at(-1)?.close}
+                />
+              </div>
+            )}
 
             {/* ── Metrics strip ──────────────────────────────────────────────── */}
             <MetricsStrip data={data} />

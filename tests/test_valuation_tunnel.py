@@ -31,9 +31,25 @@ def test_forecast_cone_widens_monotonically():
     mid, upper, lower = forecast_cone(p0=100.0, drift_annual=0.10,
                                       sigma_daily=0.02, horizon_days=30, k=2.0)
     assert len(mid) == len(upper) == len(lower) == 30
-    widths = [u - l for u, l in zip(upper, lower)]
-    assert all(b >= a for a, b in zip(widths, widths[1:]))  # non-decreasing
-    assert mid[-1] > mid[0]  # positive drift
+    prop = [(u - l) / m for u, l, m in zip(upper, lower, mid)]
+    assert all(b >= a - 1e-12 for a, b in zip(prop, prop[1:]))  # non-decreasing proportional width
+    assert mid[-1] > mid[0]  # positive drift compounds upward
+
+
+def test_forecast_cone_widening_holds_under_high_vol_and_clamp():
+    # high sigma + long horizon -> BAND_CLAMP engages; proportional width must still never shrink,
+    # including when drift is negative (center shrinking must not break monotonic widening).
+    mid, upper, lower = forecast_cone(p0=100.0, drift_annual=-0.30,
+                                      sigma_daily=0.05, horizon_days=120, k=2.0)
+    prop = [(u - l) / m for u, l, m in zip(upper, lower, mid)]
+    assert all(b >= a - 1e-12 for a, b in zip(prop, prop[1:]))
+    assert all(m > 0 for m in mid)  # log/GBM center never goes non-positive
+
+
+def test_regression_channel_rejects_nonpositive():
+    import pytest
+    with pytest.raises(ValueError):
+        log_regression_channel(np.array([100.0, -1.0, 50.0]))
 
 
 def test_next_trading_days_skips_weekends():

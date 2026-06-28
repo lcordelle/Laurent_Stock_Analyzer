@@ -13,6 +13,9 @@ BAND_CLAMP = 0.6      # cone half-width capped at ±60% of price
 
 def log_regression_channel(closes: np.ndarray, k: float = 2.0):
     """Least-squares line on log(price); band = line ± k·std(residuals)."""
+    closes = np.asarray(closes, dtype=float)
+    if np.any(closes <= 0) or np.any(np.isnan(closes)):
+        raise ValueError("closes must be positive and finite")
     n = len(closes)
     x = np.arange(n, dtype=float)
     y = np.log(closes)
@@ -61,12 +64,13 @@ def blended_annual_drift(closes, target_price, mid_last, reg_slope_daily,
 
 def forecast_cone(p0, drift_annual, sigma_daily, horizon_days, k=2.0):
     mid, upper, lower = [], [], []
+    mu_daily = math.log(1.0 + drift_annual) / 252.0
     for t in range(1, horizon_days + 1):
-        center = p0 * (1 + drift_annual * t / 252.0)
-        band = min(k * sigma_daily * math.sqrt(t), BAND_CLAMP)
+        center = p0 * math.exp(mu_daily * t)
+        half = min(k * sigma_daily * math.sqrt(t), BAND_CLAMP)
         mid.append(center)
-        upper.append(center * (1 + band))
-        lower.append(center * (1 - band))
+        upper.append(center * math.exp(half))
+        lower.append(center * math.exp(-half))
     return mid, upper, lower
 
 

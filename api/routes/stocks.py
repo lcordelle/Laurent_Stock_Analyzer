@@ -14,8 +14,10 @@ from api.models.responses import (
     StockMetrics, ScoreBreakdown, ForecastResult,
     IndicatorData, TradingSignals, NewsArticle, AnalystRating, OHLCVRow,
     ShortInterestData, EarningsDate, RiskProfileData,
-    VerdictSignalDetail, VerdictResponse, ValuationTunnel,
+    VerdictSignalDetail, VerdictResponse, ValuationTunnel, Decision,
 )
+from utils.decision_engine import compute_conviction
+from utils.market_breadth import get_market_regime_cached
 from api.utils.verdict import _compute_verdict
 from utils.risk_analysis import RiskAnalyzer
 from utils.valuation_tunnel import build_valuation_tunnel
@@ -806,6 +808,39 @@ def _analyze_ticker(ticker: str, period: str) -> FullStockAnalysis:
     except Exception as e:
         logger.debug("Valuation tunnel failed for %s: %s", ticker, e)
 
+    trading_signals_obj = _compute_trading_signals(
+        hist_with_indicators if hist_with_indicators is not None else hist,
+        raw_metrics.get("Current Price") if raw_metrics else None,
+        earnings_dates=earnings_dates,
+        short_interest_pct=short_interest.short_pct_float,
+        recent_news_count=len(raw_news),
+        fundamental_score=int(raw_score.get("total_score", 0)) if raw_score else 0,
+        analyst_upside_pct=_safe_float(
+            ((raw_analyst.get("target_price") or 0) - (raw_metrics.get("Current Price") or 0))
+            / (raw_metrics.get("Current Price") or 1) * 100
+        ) if raw_analyst and raw_metrics else None,
+    ) if raw_metrics and raw_metrics.get("Current Price") else TradingSignals()
+
+    decision = None
+    try:
+        sig = trading_signals_obj.model_dump()
+        cur = raw_metrics.get("Current Price") if raw_metrics else None
+        cur_vs_fair = None
+        if valuation_tunnel is not None and cur:
+            mids = [m for m in valuation_tunnel.hist_mid if m is not None]
+            if mids:
+                cur_vs_fair = (cur / mids[-1] - 1.0) * 100.0
+        dec = compute_conviction(
+            score=(raw_score.get("total_score") if raw_score else None),
+            signals=sig,
+            forecast=raw_forecast,
+            tunnel={"current_vs_fair_pct": cur_vs_fair} if cur_vs_fair is not None else None,
+            regime=get_market_regime_cached(),
+        )
+        decision = Decision(**dec)
+    except Exception as e:
+        logger.debug("Decision build failed for %s: %s", ticker, e)
+
     return FullStockAnalysis(
         ticker=ticker,
         company_name=info.get("longName") or info.get("shortName"),
@@ -818,18 +853,8 @@ def _analyze_ticker(ticker: str, period: str) -> FullStockAnalysis:
         forecast=_build_forecast(raw_forecast),
         indicators=_build_indicators(hist_with_indicators) if hist_with_indicators is not None else None,
         valuation_tunnel=valuation_tunnel,
-        trading_signals=_compute_trading_signals(
-            hist_with_indicators if hist_with_indicators is not None else hist,
-            raw_metrics.get("Current Price") if raw_metrics else None,
-            earnings_dates=earnings_dates,
-            short_interest_pct=short_interest.short_pct_float,
-            recent_news_count=len(raw_news),
-            fundamental_score=int(raw_score.get("total_score", 0)) if raw_score else 0,
-            analyst_upside_pct=_safe_float(
-                ((raw_analyst.get("target_price") or 0) - (raw_metrics.get("Current Price") or 0))
-                / (raw_metrics.get("Current Price") or 1) * 100
-            ) if raw_analyst and raw_metrics else None,
-        ) if raw_metrics and raw_metrics.get("Current Price") else TradingSignals(),
+        decision=decision,
+        trading_signals=trading_signals_obj,
         risk_profile=risk_profile,
         news=_build_news(raw_news),
         analyst_rating=_build_analyst(raw_analyst),

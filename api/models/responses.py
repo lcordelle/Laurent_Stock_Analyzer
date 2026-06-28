@@ -89,6 +89,29 @@ class ValuationTunnel(BaseModel):
     sigma_annual: float
 
 
+class DecisionFactor(BaseModel):
+    label: str
+    subscore: Optional[float] = None
+    weight: float
+    contribution: Optional[float] = None
+    detail: str
+
+
+class DecisionRegime(BaseModel):
+    label: str
+    vix: Optional[float] = None
+    multiplier: float
+
+
+class Decision(BaseModel):
+    conviction: float
+    direction: str
+    factors: list[DecisionFactor]
+    regime: DecisionRegime
+    expected_value_r: Optional[float] = None
+    rationale: str
+
+
 class TradingSignals(BaseModel):
     signal: Optional[str] = None
     confidence: Optional[int] = None
@@ -179,6 +202,7 @@ class FullStockAnalysis(BaseModel):
     forecast: Optional[ForecastResult] = None
     indicators: Optional[IndicatorData] = None
     valuation_tunnel: Optional["ValuationTunnel"] = None
+    decision: Optional["Decision"] = None
     trading_signals: Optional[TradingSignals] = None
     risk_profile: Optional[RiskProfileData] = None
     news: list[NewsArticle] = []

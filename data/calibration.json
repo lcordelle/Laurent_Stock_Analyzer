@@ -1,0 +1,58 @@
+{
+  "generated_at": "2026-06-28",
+  "horizon_days": 30,
+  "universe": "SP100",
+  "universe_size": 98,
+  "failed": [
+    "MMC",
+    "FI"
+  ],
+  "total_obs": 120050,
+  "buckets": [
+    {
+      "label": "0\u20132",
+      "lo": 0.0,
+      "hi": 2.0,
+      "n": 28398,
+      "hit_rate": 51.8,
+      "avg_forward_return": 0.58,
+      "median_forward_return": 0.41
+    },
+    {
+      "label": "2\u20134",
+      "lo": 2.0,
+      "hi": 4.0,
+      "n": 29634,
+      "hit_rate": 50.6,
+      "avg_forward_return": 0.1,
+      "median_forward_return": 0.12
+    },
+    {
+      "label": "4\u20136",
+      "lo": 4.0,
+      "hi": 6.0,
+      "n": 3189,
+      "hit_rate": 58.1,
+      "avg_forward_return": 1.15,
+      "median_forward_return": 1.58
+    },
+    {
+      "label": "6\u20138",
+      "lo": 6.0,
+      "hi": 8.0,
+      "n": 20,
+      "hit_rate": 35.0,
+      "avg_forward_return": -0.32,
+      "median_forward_return": -1.49
+    },
+    {
+      "label": "8\u201310",
+      "lo": 8.0,
+      "hi": 10.0,
+      "n": 12,
+      "hit_rate": 58.3,
+      "avg_forward_return": 0.89,
+      "median_forward_return": 3.73
+    }
+  ]
+}

@@ -10,11 +10,16 @@ from datetime import datetime, timedelta
 import warnings
 warnings.filterwarnings('ignore')
 
+try:
+    from config import RISK_FREE_RATE as _CONFIG_RF
+except ImportError:
+    _CONFIG_RF = 0.043
+
 class PortfolioRiskManager:
     """Professional portfolio risk analysis and management"""
     
     def __init__(self):
-        self.risk_free_rate = 0.02  # 2% risk-free rate (can be updated)
+        self.risk_free_rate = _CONFIG_RF
     
     def calculate_portfolio_metrics(self, positions):
         """

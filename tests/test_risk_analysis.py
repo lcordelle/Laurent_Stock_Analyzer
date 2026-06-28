@@ -88,7 +88,7 @@ def test_sortino_no_div_zero_flat_returns():
     """All-positive returns produce no downside; guard must prevent ZeroDivisionError."""
     returns = _series([0.001] * 100)
     result = ra.calculate_sortino_ratio(returns)
-    assert result != 0 or result == float('inf') or result >= 0  # just must not raise
+    assert result == float('inf'), f"All-positive returns → zero downside dev → Sortino should be inf, got {result}"
 
 
 def test_sortino_zero_returns_series():

@@ -50,13 +50,38 @@ def _compute_percentile_in_peer_set(value, peer_values, higher_is_better):
     if len(valid) < 2:
         return None
     all_vals = valid + [value]
-    rank = sorted(all_vals).index(value) + 1
-    pct = (rank / len(all_vals)) * 100
+    n = len(all_vals)
+    count_below = sum(v < value for v in all_vals)
+    count_equal = sum(v == value for v in all_vals)
+    rank = count_below + (count_equal + 1) / 2
+    pct = (rank / n) * 100
     return pct if higher_is_better else (100 - pct)
 
 
+_SECTOR_ALIASES = {
+    "financials": "Financial Services",
+    "financial services": "Financial Services",
+    "consumer discretionary": "Consumer Cyclical",
+    "consumer cyclical": "Consumer Cyclical",
+    "consumer staples": "Consumer Defensive",
+    "consumer defensive": "Consumer Defensive",
+}
+
+
+def _normalize_sector(sector):
+    if sector is None:
+        return "_default"
+    if sector in SECTOR_METRIC_MEDIANS:
+        return sector
+    normalized = _SECTOR_ALIASES.get(sector.lower())
+    if normalized and normalized in SECTOR_METRIC_MEDIANS:
+        return normalized
+    return "_default"
+
+
 def _get_sector_fallback(sector, metric_key):
-    medians = SECTOR_METRIC_MEDIANS.get(sector) or SECTOR_METRIC_MEDIANS["_default"]
+    key = _normalize_sector(sector)
+    medians = SECTOR_METRIC_MEDIANS.get(key) or SECTOR_METRIC_MEDIANS["_default"]
     return medians.get(metric_key)
 
 
@@ -303,7 +328,6 @@ def _grade_factor(stock_metrics, peer_metrics_list, factor, sector):
         }
 
     composite_pct = float(np.mean(valid_pcts))
-    valid_peers_count = max(len(pm) for pm in [peer_metrics_list]) if peer_metrics_list else 0
     data_quality = "sector_relative" if len(peer_metrics_list) >= 3 else "absolute_threshold"
 
     return {
@@ -340,8 +364,9 @@ def compute_factor_grades(ticker, sector):
 
     # Grade the four data-driven factors
     grades = {}
+    normalized_sector = _normalize_sector(sector)
     for factor in ["value", "growth", "profitability", "momentum"]:
-        grades[factor] = _grade_factor(stock_metrics, peer_metrics_list, factor, sector or "_default")
+        grades[factor] = _grade_factor(stock_metrics, peer_metrics_list, factor, normalized_sector)
 
     # EPS Revisions: standalone score (not peer-relative)
     rev = _compute_eps_revision_score(ticker)
@@ -354,7 +379,7 @@ def compute_factor_grades(ticker, sector):
                 "downs_7d": rev["downs_7d"],
                 "beat_streak": rev["beat_streak"],
             },
-            "data_quality": "absolute_threshold",
+            "data_quality": "eps_revision_model",
             "n_peers_used": 0,
             "tooltip": f"EPS Revisions: {rev['direction']} — {rev['ups_7d']} upgrades / {rev['downs_7d']} downgrades (7d), {rev['beat_streak']}/4 recent beats",
         }

@@ -53,6 +53,19 @@ export interface Decision {
   rationale: string
 }
 
+export interface Calibration {
+  available: boolean
+  as_of?: string | null
+  horizon_days?: number | null
+  n?: number | null
+  bucket_label?: string | null
+  hit_rate?: number | null
+  avg_forward_return?: number | null
+  low_sample?: boolean | null
+  proxy_conviction?: number | null
+  note?: string | null
+}
+
 export interface RiskProfile {
   volatility?: number
   var_5pct?: number
@@ -99,6 +112,7 @@ export interface FullStockAnalysis {
   forecast?: ForecastResult; indicators?: IndicatorData
   valuation_tunnel?: ValuationTunnel
   decision?: Decision
+  calibration?: Calibration
   trading_signals?: {
     signal?: string; confidence?: number
     optimal_entry?: number; stop_loss?: number

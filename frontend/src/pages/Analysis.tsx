@@ -594,6 +594,7 @@ export default function Analysis() {
             {data.decision && (
               <DecisionPanel
                 decision={data.decision}
+                calibration={data.calibration}
                 entry={data.trading_signals?.optimal_entry ?? null}
                 stop={data.trading_signals?.stop_loss ?? null}
                 currentPrice={data.metrics?.current_price ?? data.ohlcv.at(-1)?.close ?? null}

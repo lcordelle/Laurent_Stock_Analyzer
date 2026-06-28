@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import type { Decision } from '../../lib/types'
+import type { Decision, Calibration } from '../../lib/types'
 import { computeSizing } from '../../lib/sizing'
 
 interface Props {
   decision: Decision
+  calibration?: Calibration
   entry: number | null
   stop: number | null
   currentPrice: number | null
@@ -18,7 +19,7 @@ function num(v: string, fallback: number): number {
   return isNaN(n) ? fallback : n
 }
 
-export default function DecisionPanel({ decision, entry, stop, currentPrice }: Props) {
+export default function DecisionPanel({ decision, calibration, entry, stop, currentPrice }: Props) {
   const [equity, setEquity] = useState<number>(() => num(localStorage.getItem('decision.accountSize') ?? '', 100000))
   const [maxRisk, setMaxRisk] = useState<number>(() => num(localStorage.getItem('decision.maxRiskPct') ?? '', 1))
 
@@ -79,6 +80,29 @@ export default function DecisionPanel({ decision, entry, stop, currentPrice }: P
             <span style={{ color: decision.expected_value_r >= 0 ? '#00e676' : '#ff1744' }}>
               {decision.expected_value_r >= 0 ? '+' : ''}{decision.expected_value_r}R
             </span>
+          </div>
+        )}
+        {calibration?.available && calibration.hit_rate != null && (
+          <div className="flex items-start gap-2 text-xs mt-1">
+            <span className="w-24 shrink-0" style={{ color: '#94a3b8' }}>Track record</span>
+            <span style={{ color: '#cbd5e1' }}>
+              Timing signal here (proxy {calibration.proxy_conviction}/10):{' '}
+              <span style={{ color: calibration.low_sample ? '#94a3b8' : (calibration.hit_rate ?? 0) >= 50 ? '#00e676' : '#ff1744', fontWeight: 700 }}>
+                {calibration.hit_rate}% up
+              </span>{' '}over {calibration.horizon_days}d, avg{' '}
+              <span style={{ color: (calibration.avg_forward_return ?? 0) >= 0 ? '#00e676' : '#ff1744' }}>
+                {(calibration.avg_forward_return ?? 0) >= 0 ? '+' : ''}{calibration.avg_forward_return}%
+              </span>{' '}
+              <span style={{ color: '#475569' }}>(n={calibration.n}, as-of {calibration.as_of})</span>
+              {calibration.low_sample && <span style={{ color: '#ffab00' }}> · small sample, low confidence</span>}
+              <span className="block" style={{ color: '#334155' }}>Ex-fundamentals · S&P 100 · overlapping windows</span>
+            </span>
+          </div>
+        )}
+        {calibration && !calibration.available && (
+          <div className="flex items-center gap-2 text-xs mt-1">
+            <span className="w-24 shrink-0" style={{ color: '#94a3b8' }}>Track record</span>
+            <span style={{ color: '#475569' }}>{calibration.note}</span>
           </div>
         )}
       </div>

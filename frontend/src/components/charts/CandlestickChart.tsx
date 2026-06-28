@@ -361,12 +361,14 @@ export default function CandlestickChart({ ohlcv, indicators, valuationTunnel, t
         const offset = ohlcv.length - histLen
         type LinePt = { time: import('lightweight-charts').Time; value: number }
         const mkHist = (arr: (number | null)[]): LinePt[] =>
-          arr.slice(0, histLen).map((v, i) => ({
-            time: ohlcv[offset + i].date.slice(0, 10) as import('lightweight-charts').Time,
-            value: v as number,
-          })).filter(d => d.value != null)
+          arr.slice(0, histLen)
+            .map((v, i) => ({ time: ohlcv[offset + i].date.slice(0, 10) as import('lightweight-charts').Time, value: v }))
+            .filter((d): d is LinePt => d.value != null)
+            .sort((a, b) => (a.time < b.time ? -1 : 1))
         const mkFc = (arr: number[]): LinePt[] =>
-          arr.map((v, i) => ({ time: vt.future_dates[i] as import('lightweight-charts').Time, value: v }))
+          arr.slice(0, vt.future_dates.length)
+            .map((v, i) => ({ time: vt.future_dates[i] as import('lightweight-charts').Time, value: v }))
+            .sort((a, b) => (a.time < b.time ? -1 : 1))
 
         const BLUE = '#3b82f6'
         const addLine = (color: string, width: 1 | 2, dashed: boolean, title: string) =>

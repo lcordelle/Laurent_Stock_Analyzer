@@ -67,3 +67,17 @@ def get_market_regime() -> dict:
         logger.warning("SPY fetch failed: %s", e)
 
     return result
+
+
+import time as _time
+_REGIME_CACHE = {"ts": 0.0, "data": None}
+_REGIME_TTL = 300  # 5 minutes
+
+def get_market_regime_cached() -> dict:
+    now = _time.monotonic()
+    if _REGIME_CACHE["data"] is not None and (now - _REGIME_CACHE["ts"]) < _REGIME_TTL:
+        return _REGIME_CACHE["data"]
+    data = get_market_regime()
+    _REGIME_CACHE["ts"] = now
+    _REGIME_CACHE["data"] = data
+    return data

@@ -14,6 +14,7 @@ import pandas as pd
 import numpy as np
 import warnings
 import time
+import config as _cfg
 warnings.filterwarnings('ignore')
 
 logger = logging.getLogger(__name__)
@@ -196,97 +197,118 @@ class StockAnalyzer:
         score = 0
         max_score = 100
         components = {}
-        
-        # Profitability Score (25 points)
+
+        # Per-component caps driven by config.SCORE_WEIGHTS (single source of truth)
+        _w = _cfg.SCORE_WEIGHTS
+        _CAP_PROFIT = _w.get('profitability', 25)
+        _CAP_ROE    = _w.get('roe', 20)
+        _CAP_FCF    = _w.get('fcf_margin', 20)
+        _CAP_VAL    = _w.get('valuation', 20)
+        _CAP_GROWTH = _w.get('growth', 15)
+
+        # Profitability Score (cap from config)
         try:
             gm = info.get('grossMargins')
             if gm is not None and not pd.isna(gm):
                 gross_margin = float(gm) * 100
                 if gross_margin > 60:
-                    score += 25; components['Gross Margin'] = 25
+                    pts = _CAP_PROFIT
                 elif gross_margin > 40:
-                    score += 15; components['Gross Margin'] = 15
+                    pts = round(_CAP_PROFIT * 0.60)
                 elif gross_margin > 20:
-                    score += 10; components['Gross Margin'] = 10
+                    pts = round(_CAP_PROFIT * 0.40)
+                elif gross_margin > 0:
+                    pts = round(_CAP_PROFIT * 0.20)
                 else:
-                    score += 5; components['Gross Margin'] = 5
+                    pts = 0
+                score += pts; components['Gross Margin'] = pts
             else:
                 components['Gross Margin'] = 0
         except (TypeError, ValueError, AttributeError) as e:
             logger.warning("Gross margin scoring failed: %s", e)
             components['Gross Margin'] = 0
 
-        # ROE Score (20 points)
+        # ROE Score (cap from config)
         try:
             roe_raw = info.get('returnOnEquity')
             if roe_raw is not None and not pd.isna(roe_raw):
                 roe = float(roe_raw) * 100
                 if roe > 20:
-                    score += 20; components['ROE'] = 20
+                    pts = _CAP_ROE
                 elif roe > 15:
-                    score += 15; components['ROE'] = 15
+                    pts = round(_CAP_ROE * 0.75)
                 elif roe > 10:
-                    score += 10; components['ROE'] = 10
+                    pts = round(_CAP_ROE * 0.50)
+                elif roe > 0:
+                    pts = round(_CAP_ROE * 0.25)
                 else:
-                    score += 5; components['ROE'] = 5
+                    pts = 0
+                score += pts; components['ROE'] = pts
             else:
                 components['ROE'] = 0
         except (TypeError, ValueError, AttributeError) as e:
             logger.warning("ROE scoring failed: %s", e)
             components['ROE'] = 0
 
-        # FCF Margin Score (20 points)
+        # FCF Margin Score (cap from config)
         try:
             fcf = info.get('freeCashflow')
             rev = info.get('totalRevenue')
             if fcf is not None and rev is not None and not pd.isna(fcf) and not pd.isna(rev) and float(rev) != 0:
                 fcf_margin = float(fcf) / float(rev) * 100
                 if fcf_margin > 15:
-                    score += 20; components['FCF Margin'] = 20
+                    pts = _CAP_FCF
                 elif fcf_margin > 10:
-                    score += 15; components['FCF Margin'] = 15
+                    pts = round(_CAP_FCF * 0.75)
                 elif fcf_margin > 5:
-                    score += 10; components['FCF Margin'] = 10
+                    pts = round(_CAP_FCF * 0.50)
+                elif fcf_margin > 0:
+                    pts = round(_CAP_FCF * 0.25)
                 else:
-                    score += 5; components['FCF Margin'] = 5
+                    pts = 0
+                score += pts; components['FCF Margin'] = pts
             else:
                 components['FCF Margin'] = 0
         except (TypeError, ValueError, ZeroDivisionError, AttributeError) as e:
             logger.warning("FCF margin scoring failed: %s", e)
             components['FCF Margin'] = 0
 
-        # Valuation Score (20 points)
+        # Valuation Score (cap from config; negative/zero P/E → 0)
         try:
             pe = info.get('trailingPE')
             if pe is not None and not pd.isna(pe):
                 pe_ratio = float(pe)
-                if 10 < pe_ratio < 25:
-                    score += 20; components['Valuation'] = 20
-                elif 5 < pe_ratio < 35:
-                    score += 15; components['Valuation'] = 15
-                elif pe_ratio < 50:
-                    score += 10; components['Valuation'] = 10
+                if pe_ratio <= 0:
+                    pts = 0
+                elif 10 < pe_ratio < 25:
+                    pts = _CAP_VAL
+                elif 5 < pe_ratio <= 35:
+                    pts = round(_CAP_VAL * 0.75)
+                elif 35 < pe_ratio <= 50:
+                    pts = round(_CAP_VAL * 0.50)
                 else:
-                    score += 5; components['Valuation'] = 5
+                    pts = round(_CAP_VAL * 0.25)
+                score += pts; components['Valuation'] = pts
             else:
                 components['Valuation'] = 0
         except (TypeError, ValueError, AttributeError) as e:
             logger.warning("Valuation scoring failed: %s", e)
             components['Valuation'] = 0
 
-        # Growth Score (15 points)
+        # Growth Score (cap from config)
         try:
             rg = info.get('revenueGrowth')
             if rg is not None and not pd.isna(rg):
                 revenue_growth = float(rg) * 100
                 if revenue_growth > 20:
-                    score += 15; components['Growth'] = 15
+                    pts = _CAP_GROWTH
                 elif revenue_growth > 10:
-                    score += 10; components['Growth'] = 10
+                    pts = round(_CAP_GROWTH * 0.67)
                 elif revenue_growth > 0:
-                    score += 5; components['Growth'] = 5
+                    pts = round(_CAP_GROWTH * 0.33)
                 else:
-                    components['Growth'] = 0
+                    pts = 0
+                score += pts; components['Growth'] = pts
             else:
                 components['Growth'] = 0
         except (TypeError, ValueError, AttributeError) as e:
@@ -375,10 +397,10 @@ class StockAnalyzer:
         hist['SMA_50'] = hist['Close'].rolling(window=50).mean()
         hist['SMA_200'] = hist['Close'].rolling(window=200).mean()
         
-        # RSI
+        # RSI — Wilder's smoothing (ewm alpha=1/14, adjust=False)
         delta = hist['Close'].diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+        gain = delta.where(delta > 0, 0).ewm(alpha=1/14, adjust=False, min_periods=14).mean()
+        loss = (-delta.where(delta < 0, 0)).ewm(alpha=1/14, adjust=False, min_periods=14).mean()
         rs = gain / loss
         hist['RSI'] = 100 - (100 / (1 + rs))
         
@@ -388,29 +410,31 @@ class StockAnalyzer:
         hist['MACD'] = exp1 - exp2
         hist['Signal'] = hist['MACD'].ewm(span=9, adjust=False).mean()
         
-        # Bollinger Bands
+        # Bollinger Bands — population std (ddof=0) per canonical definition
         hist['BB_Middle'] = hist['Close'].rolling(window=20).mean()
-        bb_std = hist['Close'].rolling(window=20).std()
+        bb_std = hist['Close'].rolling(window=20).std(ddof=0)
         hist['BB_Upper'] = hist['BB_Middle'] + (bb_std * 2)
         hist['BB_Lower'] = hist['BB_Middle'] - (bb_std * 2)
         
-        # Stochastic Oscillator (14-period)
+        # Stochastic Oscillator (14-period) — guard divide-by-zero (flat range → 50)
         if len(hist) >= 14:
             low_14 = hist['Low'].rolling(window=14).min()
             high_14 = hist['High'].rolling(window=14).max()
-            hist['Stoch_K'] = 100 * ((hist['Close'] - low_14) / (high_14 - low_14))
+            stoch_range = high_14 - low_14
+            stoch_k_raw = 100 * ((hist['Close'] - low_14) / stoch_range)
+            hist['Stoch_K'] = stoch_k_raw.where(stoch_range != 0, 50)
             hist['Stoch_D'] = hist['Stoch_K'].rolling(window=3).mean()
         
-        # ADX (Average Directional Index) - 14-period
+        # ADX (Average Directional Index) — Wilder's smoothing throughout
         if len(hist) >= 28:
-            # Calculate True Range
+            # True Range
             hist['TR'] = pd.concat([
                 hist['High'] - hist['Low'],
                 abs(hist['High'] - hist['Close'].shift()),
                 abs(hist['Low'] - hist['Close'].shift())
             ], axis=1).max(axis=1)
-            
-            # Calculate Directional Movement
+
+            # Directional Movement
             hist['DM_Plus'] = np.where(
                 (hist['High'] - hist['High'].shift()) > (hist['Low'].shift() - hist['Low']),
                 np.maximum(hist['High'] - hist['High'].shift(), 0),
@@ -421,20 +445,26 @@ class StockAnalyzer:
                 np.maximum(hist['Low'].shift() - hist['Low'], 0),
                 0
             )
-            
-            # Smooth the values
-            period = 14
-            hist['TR_Smooth'] = hist['TR'].rolling(window=period).sum()
-            hist['DM_Plus_Smooth'] = hist['DM_Plus'].rolling(window=period).sum()
-            hist['DM_Minus_Smooth'] = hist['DM_Minus'].rolling(window=period).sum()
-            
-            # Calculate DI+ and DI-
+
+            # Wilder's smoothing for TR, +DM, -DM (alpha=1/14, adjust=False)
+            hist['TR_Smooth'] = hist['TR'].ewm(alpha=1/14, adjust=False, min_periods=14).mean()
+            hist['DM_Plus_Smooth'] = hist['DM_Plus'].ewm(alpha=1/14, adjust=False, min_periods=14).mean()
+            hist['DM_Minus_Smooth'] = hist['DM_Minus'].ewm(alpha=1/14, adjust=False, min_periods=14).mean()
+
+            # +DI and -DI
             hist['DI_Plus'] = 100 * (hist['DM_Plus_Smooth'] / hist['TR_Smooth'])
             hist['DI_Minus'] = 100 * (hist['DM_Minus_Smooth'] / hist['TR_Smooth'])
-            
-            # Calculate DX and ADX
-            hist['DX'] = 100 * abs(hist['DI_Plus'] - hist['DI_Minus']) / (hist['DI_Plus'] + hist['DI_Minus'])
-            hist['ADX'] = hist['DX'].rolling(window=period).mean()
+
+            # DX — guard divide-by-zero where (+DI + -DI) == 0
+            di_sum = hist['DI_Plus'] + hist['DI_Minus']
+            hist['DX'] = np.where(
+                di_sum != 0,
+                100 * abs(hist['DI_Plus'] - hist['DI_Minus']) / di_sum,
+                0
+            )
+
+            # ADX = Wilder-smoothed DX
+            hist['ADX'] = pd.Series(hist['DX'], index=hist.index).ewm(alpha=1/14, adjust=False).mean()
         
         # Ichimoku Cloud
         if len(hist) >= 52:
@@ -518,7 +548,9 @@ class StockAnalyzer:
         forecast_direction = (score_factor * 0.4 + trend_score * 0.2 + momentum_factor * 0.2 + 
                               max(-1, min(1, growth_factor)) * 0.2)
         
-        annual_return_estimate = forecast_direction * (abs(momentum) * 0.5 + abs(avg_growth) * 0.3)
+        # Baseline ensures a non-zero estimate when momentum and growth are both 0
+        _FORECAST_BASELINE = 9.0  # % annualised baseline magnitude
+        annual_return_estimate = forecast_direction * (abs(momentum) * 0.5 + abs(avg_growth) * 0.3 + _FORECAST_BASELINE)
         
         # Calculate forecast for 1 month
         time_factor = days / 365

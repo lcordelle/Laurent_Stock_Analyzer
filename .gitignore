@@ -50,7 +50,8 @@ build/
 # render.yaml is safe to commit only after removing hardcoded values
 
 # Data files (may contain personal analysis records)
-data/
+data/*
+!data/calibration.json
 
 # Superpowers plugin runtime
 .superpowers/

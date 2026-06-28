@@ -61,7 +61,7 @@ export default function DecisionPanel({ decision, entry, stop, currentPrice }: P
                     transform: pos ? 'none' : 'translateX(-100%)',
                     backgroundColor: f.subscore == null ? '#475569' : pos ? '#00e676' : '#ff1744' }} />
               </div>
-              <span className="w-40 shrink-0 text-right" style={{ color: '#475569' }}>
+              <span className="w-40 shrink-0 text-right truncate" style={{ color: '#475569' }}>
                 {f.subscore == null ? 'n/a' : f.detail}
               </span>
             </div>

@@ -66,6 +66,8 @@ def _expected_value_r(signals, raw, mult) -> Optional[float]:
     if risk <= 0:
         return None
     r = abs(tp1 - entry) / risk
+    # Win-probability heuristic: base 50%, tilted by signed conviction (raw·regime),
+    # capped to [5%,95%]; loss leg assumed at 1R (the stop). EV in R-multiples.
     p = _clamp(0.5 + raw * mult * 0.4, 0.05, 0.95)
     return round(p * r - (1 - p) * 1.0, 2)
 

@@ -51,7 +51,7 @@ def _valuation(forecast, tunnel) -> Optional[float]:
         parts.append(_clamp(chg / 10.0, -1.0, 1.0))
     if not parts:
         return None
-    return sum(parts) / len(parts)
+    return _clamp(sum(parts) / len(parts), -1.0, 1.0)
 
 
 def _expected_value_r(signals, raw, mult) -> Optional[float]:
@@ -91,8 +91,9 @@ def compute_conviction(score, signals, forecast, tunnel, regime, weights=None) -
     regime_label = (regime or {}).get("regime") or "Unknown"
     mult = REGIME_MULT.get(regime_label, 1.0)
 
-    conviction = round(_clamp(abs(raw) * mult, 0.0, 1.0) * 10.0, 1)
     direction = "Long" if raw > 0.15 else "Short" if raw < -0.15 else "Stand aside"
+    effective_mult = mult if direction == "Long" else 1.0
+    conviction = round(_clamp(abs(raw) * effective_mult * 10.0, 0.0, 10.0), 1)
 
     factors = [{
         "label": k,
@@ -102,15 +103,15 @@ def compute_conviction(score, signals, forecast, tunnel, regime, weights=None) -
         "detail": details[k],
     } for k in DEFAULT_WEIGHTS]
 
-    ev_r = _expected_value_r(signals, raw, mult)
+    ev_r = _expected_value_r(signals, raw, effective_mult)
     rationale = (f"{direction} · conviction {conviction}/10 · regime {regime_label}"
-                 f"{'' if mult == 1.0 else f' (×{mult})'}")
+                 f"{'' if effective_mult == 1.0 else f' (×{effective_mult})'}")
 
     return {
         "conviction": conviction,
         "direction": direction,
         "factors": factors,
-        "regime": {"label": regime_label, "vix": (regime or {}).get("vix"), "multiplier": mult},
+        "regime": {"label": regime_label, "vix": (regime or {}).get("vix"), "multiplier": effective_mult},
         "expected_value_r": ev_r,
         "rationale": rationale,
     }

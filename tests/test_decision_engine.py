@@ -8,6 +8,14 @@ TUN = {"current_vs_fair_pct": -5.0}  # 5% below fair value (bullish)
 RISK_ON = {"regime": "Risk-On", "vix": 14.0}
 DANGER  = {"regime": "Danger", "vix": 40.0}
 
+BEAR_SIG = {
+    "signal": "STRONG SELL", "confidence": 80, "signal_quality": "PRIME",
+    "trend_strength": "STRONG DOWNTREND", "adx": 30,
+    "optimal_entry": 100.0, "stop_loss": 110.0, "tp1": 80.0, "risk_reward": 2.0
+}
+FCAST_DN = {"forecast_change_pct": -8.0}
+TUN_OVER = {"current_vs_fair_pct": 5.0}  # 5% above fair value (bearish)
+
 
 def test_strong_bull_is_long_high_conviction():
     d = compute_conviction(85, BULL_SIG, FCAST_UP, TUN, RISK_ON)
@@ -29,9 +37,16 @@ def test_higher_fundamentals_raise_conviction():
 
 
 def test_conflict_is_stand_aside():
-    bear_sig = {**BULL_SIG, "signal": "SELL", "trend_strength": "WEAK DOWNTREND"}
-    d = compute_conviction(50, bear_sig, {"forecast_change_pct": 0.5}, {"current_vs_fair_pct": 0.0}, RISK_ON)
-    assert d["direction"] in ("Stand aside", "Short")
+    # Strong bullish fundamentals (score=95) vs strongly bearish technicals
+    # (SELL signal + STRONG DOWNTREND) with bullish valuation -> raw ~0.055, Stand aside
+    bear_sig = {**BULL_SIG, "signal": "SELL", "trend_strength": "STRONG DOWNTREND"}
+    d = compute_conviction(
+        95, bear_sig,
+        {"forecast_change_pct": 8.0},
+        {"current_vs_fair_pct": -10.0},
+        RISK_ON,
+    )
+    assert d["direction"] == "Stand aside"
 
 
 def test_weights_renormalize_when_factor_missing():
@@ -47,3 +62,24 @@ def test_ev_r_present_with_stop_absent_without():
     no_stop = {**BULL_SIG, "stop_loss": None}
     d2 = compute_conviction(85, no_stop, FCAST_UP, TUN, RISK_ON)
     assert d2["expected_value_r"] is None
+
+
+def test_short_in_danger_not_dampened():
+    # Short direction should NOT be dampened by Danger regime (effective_mult=1.0)
+    ro = compute_conviction(30, BEAR_SIG, FCAST_DN, TUN_OVER, RISK_ON)
+    dg = compute_conviction(30, BEAR_SIG, FCAST_DN, TUN_OVER, DANGER)
+
+    assert ro["direction"] == "Short", f"Expected Short, got {ro['direction']!r}"
+    assert dg["direction"] == "Short", f"Expected Short, got {dg['direction']!r}"
+    # Short conviction is identical in Risk-On vs Danger (effective_mult=1.0 in both)
+    assert dg["conviction"] == ro["conviction"], (
+        f"Short conviction should not be dampened: "
+        f"Danger={dg['conviction']} vs Risk-On={ro['conviction']}"
+    )
+    # Long IS dampened in Danger
+    long_ro = compute_conviction(85, BULL_SIG, FCAST_UP, TUN, RISK_ON)["conviction"]
+    long_dg = compute_conviction(85, BULL_SIG, FCAST_UP, TUN, DANGER)["conviction"]
+    assert long_dg < long_ro, (
+        f"Long conviction should be dampened in Danger: "
+        f"Danger={long_dg} vs Risk-On={long_ro}"
+    )

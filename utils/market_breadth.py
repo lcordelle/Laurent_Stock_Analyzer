@@ -3,6 +3,7 @@ Market Breadth and Regime Analysis
 VIX-based regime classification + SPY daily change.
 """
 
+import time as _time
 import yfinance as yf
 import logging
 
@@ -69,7 +70,6 @@ def get_market_regime() -> dict:
     return result
 
 
-import time as _time
 _REGIME_CACHE = {"ts": 0.0, "data": None}
 _REGIME_TTL = 300  # 5 minutes
 

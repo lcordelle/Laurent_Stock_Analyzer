@@ -59,14 +59,20 @@ def hist_to_ohlcv(hist: pd.DataFrame, max_rows: int = 252) -> list[OHLCVRow]:
         h = row.get("High")
         l = row.get("Low")
         c = row.get("Close")
-        if not (pd.notna(o) and pd.notna(h) and pd.notna(l) and pd.notna(c)):
+        # Fall a single missing OHLC field back to a present price rather than
+        # dropping the bar — dropping would shift this list out of positional
+        # alignment with the indicator / valuation-tunnel arrays (same tail()).
+        # Only a genuinely empty row (all four NaN — not seen in daily data) is skipped.
+        present = [v for v in (c, o, h, l) if pd.notna(v)]
+        if not present:
             continue
+        ref = float(c) if pd.notna(c) else float(present[0])
         rows.append(OHLCVRow(
             date=idx.strftime("%Y-%m-%d") if hasattr(idx, "strftime") else str(idx),
-            open=float(o),
-            high=float(h),
-            low=float(l),
-            close=float(c),
+            open=float(o) if pd.notna(o) else ref,
+            high=float(h) if pd.notna(h) else ref,
+            low=float(l) if pd.notna(l) else ref,
+            close=ref,
             volume=float(row["Volume"]) if pd.notna(row.get("Volume")) else 0.0,
         ))
     return rows

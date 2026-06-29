@@ -83,3 +83,31 @@ def test_short_in_danger_not_dampened():
         f"Long conviction should be dampened in Danger: "
         f"Danger={long_dg} vs Risk-On={long_ro}"
     )
+
+
+from utils.decision_engine import quality_grade, read_line
+
+
+def test_quality_grade_cutoffs():
+    assert quality_grade(85) == "A"
+    assert quality_grade(70) == "B"
+    assert quality_grade(55) == "C"
+    assert quality_grade(40) == "D"
+    assert quality_grade(20) == "F"
+    assert quality_grade(None) is None
+
+
+def test_read_line_quality_strong_setup_weak():
+    s = read_line("A", "Weak", "Long")
+    assert "watchlist" in s.lower() or "wait" in s.lower()
+    assert "compan" in s.lower() or "quality" in s.lower()
+
+
+def test_read_line_aligned_strong():
+    s = read_line("A", "Prime", "Long")
+    assert "buy" in s.lower() or "align" in s.lower() or "strong" in s.lower()
+
+
+def test_read_line_low_quality():
+    s = read_line("F", "Strong", "Long")
+    assert "weak" in s.lower() or "poor" in s.lower() or "caution" in s.lower() or "trade" in s.lower()

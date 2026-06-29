@@ -67,3 +67,31 @@ def test_lookup_clamps_to_range():
     buckets = bucketize([{"conviction": 5.0, "direction": "Long", "fwd_return": 0.01}])
     assert lookup(buckets, 10.0) is not None
     assert lookup(buckets, 0.0) is not None
+
+
+from utils.calibration import conviction_percentiles, percentile_of, band_for
+
+
+def test_conviction_percentiles_span_and_monotonic():
+    obs = [{"conviction": float(i % 11), "direction": "Long", "fwd_return": 0.01} for i in range(500)]
+    bp = conviction_percentiles(obs)
+    assert bp[0]["p"] == 0 and bp[-1]["p"] == 100
+    vals = [b["value"] for b in bp]
+    assert all(b >= a for a, b in zip(vals, vals[1:]))
+
+
+def test_percentile_of_interpolates_and_clamps():
+    obs = [{"conviction": float(i) / 100 * 10, "direction": "Long", "fwd_return": 0.0} for i in range(101)]
+    bp = conviction_percentiles(obs)
+    assert abs(percentile_of(bp, 5.0) - 50) < 12
+    assert percentile_of(bp, -1) == 0.0
+    assert percentile_of(bp, 99) == 100.0
+    assert percentile_of([], 5.0) is None
+
+
+def test_band_for_cutoffs():
+    assert band_for(49) == "Weak"
+    assert band_for(50) == "Fair"
+    assert band_for(80) == "Strong"
+    assert band_for(95) == "Prime"
+    assert band_for(None) is None

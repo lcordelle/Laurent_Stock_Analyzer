@@ -173,3 +173,43 @@ def load_table(path: str) -> Optional[dict]:
             return json.load(f)
     except Exception:
         return None
+
+
+def conviction_percentiles(observations: list) -> list:
+    vals = sorted(o["conviction"] for o in observations if o["direction"] in ("Long", "Short"))
+    if not vals:
+        return []
+    out = []
+    for p in range(0, 101, 5):
+        idx = int(round((p / 100.0) * (len(vals) - 1)))
+        out.append({"p": p, "value": round(float(vals[idx]), 4)})
+    return out
+
+
+def percentile_of(breakpoints: list, conviction: float) -> Optional[float]:
+    if not breakpoints:
+        return None
+    c = float(conviction)
+    if c <= breakpoints[0]["value"]:
+        return 0.0
+    if c >= breakpoints[-1]["value"]:
+        return 100.0
+    for i in range(1, len(breakpoints)):
+        lo, hi = breakpoints[i - 1], breakpoints[i]
+        if c <= hi["value"]:
+            span = hi["value"] - lo["value"]
+            frac = 0.0 if span <= 0 else (c - lo["value"]) / span
+            return round(lo["p"] + frac * (hi["p"] - lo["p"]), 1)
+    return 100.0
+
+
+def band_for(percentile: Optional[float]) -> Optional[str]:
+    if percentile is None:
+        return None
+    if percentile < 50:
+        return "Weak"
+    if percentile < 80:
+        return "Fair"
+    if percentile < 95:
+        return "Strong"
+    return "Prime"

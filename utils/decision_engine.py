@@ -117,3 +117,40 @@ def compute_conviction(score, signals, forecast, tunnel, regime, weights=None) -
         "expected_value_r": ev_r,
         "rationale": rationale,
     }
+
+
+def quality_grade(score) -> Optional[str]:
+    if score is None:
+        return None
+    s = float(score)
+    if s >= 80:
+        return "A"
+    if s >= 65:
+        return "B"
+    if s >= 50:
+        return "C"
+    if s >= 35:
+        return "D"
+    return "F"
+
+
+def read_line(grade: Optional[str], setup_band: Optional[str], direction: str) -> str:
+    q_strong = grade in ("A", "B")
+    q_weak = grade in ("D", "F")
+    s_good = setup_band in ("Strong", "Prime")
+    s_poor = setup_band in ("Weak", "Fair")
+    if grade is None or setup_band is None:
+        return f"{direction} setup; full read needs both quality and calibration data."
+    if q_strong and s_good:
+        return f"High-quality company and a strong {direction.lower()} setup — the two align."
+    if q_strong and s_poor:
+        return ("High-quality company, but a weak entry right now — "
+                "watchlist candidate, not a buy here.")
+    if q_weak and s_good:
+        return ("Strong setup on a weak-quality company — a trade, not an investment; "
+                "keep size and stops tight.")
+    if q_weak and s_poor:
+        return "Weak on both quality and setup — little here; likely avoid."
+    if s_good:
+        return f"Average quality with a strong {direction.lower()} setup — a timing trade."
+    return "Average quality and a soft setup — no edge; wait for a better entry."

@@ -15,11 +15,11 @@ from api.models.responses import (
     StockMetrics, ScoreBreakdown, ForecastResult,
     IndicatorData, TradingSignals, NewsArticle, AnalystRating, OHLCVRow,
     ShortInterestData, EarningsDate, RiskProfileData,
-    VerdictSignalDetail, VerdictResponse, ValuationTunnel, Decision, Calibration,
+    VerdictSignalDetail, VerdictResponse, ValuationTunnel, Decision, Quality, Setup,
 )
-from utils.decision_engine import compute_conviction
+from utils.decision_engine import compute_conviction, quality_grade, read_line
 from utils.market_breadth import get_market_regime_cached
-from utils.calibration import load_table, lookup as cal_lookup
+from utils.calibration import load_table, lookup as cal_lookup, percentile_of, band_for
 from api.utils.verdict import _compute_verdict
 from utils.risk_analysis import RiskAnalyzer
 from utils.valuation_tunnel import build_valuation_tunnel
@@ -844,50 +844,38 @@ def _analyze_ticker(ticker: str, period: str) -> FullStockAnalysis:
             mids = [m for m in valuation_tunnel.hist_mid if m is not None]
             if mids:
                 cur_vs_fair = (cur / mids[-1] - 1.0) * 100.0
-        dec = compute_conviction(
-            score=(raw_score.get("total_score") if raw_score else None),
-            signals=sig,
-            forecast=raw_forecast,
+        setup_raw = compute_conviction(
+            score=None, signals=sig, forecast=raw_forecast,
             tunnel={"current_vs_fair_pct": cur_vs_fair} if cur_vs_fair is not None else None,
             regime=get_market_regime_cached(),
         )
-        decision = Decision(**dec)
+        q_score = int(raw_score["total_score"]) if raw_score and raw_score.get("total_score") is not None else None
+        quality = Quality(score=q_score, grade=quality_grade(q_score))
+
+        table = _calibration_table()
+        pct = band = hit = avg = n = low = as_of = horizon = None
+        if table and table.get("conviction_percentiles"):
+            pct = percentile_of(table["conviction_percentiles"], setup_raw["conviction"])
+            band = band_for(pct)
+            as_of = table.get("generated_at")
+            horizon = table.get("horizon_days")
+            b = cal_lookup(table.get("buckets", []), setup_raw["conviction"])
+            if b and b.get("n"):
+                hit, avg, n = b["hit_rate"], b["avg_forward_return"], b["n"]
+                low = b["n"] < 100
+        setup = Setup(
+            score=setup_raw["conviction"], direction=setup_raw["direction"],
+            percentile=pct, band=band, hit_rate=hit, avg_forward_return=avg, n=n,
+            low_sample=low, as_of=as_of, horizon_days=horizon,
+            expected_value_r=setup_raw["expected_value_r"],
+            factors=[f for f in setup_raw["factors"] if f["label"] != "Fundamentals"],
+            regime=setup_raw["regime"],
+        )
+        decision = Decision(quality=quality, setup=setup,
+                            read=read_line(quality.grade, band, setup_raw["direction"]))
     except Exception as e:
         logger.debug("Decision build failed for %s: %s", ticker, e)
-
-    calibration: Optional[Calibration] = None
-    try:
-        table = _calibration_table()
-        if table is not None:
-            proxy = compute_conviction(
-                score=None,
-                signals=(trading_signals_obj.model_dump() if trading_signals_obj else {}),
-                forecast=raw_forecast,
-                tunnel={"current_vs_fair_pct": cur_vs_fair} if cur_vs_fair is not None else None,
-                regime=get_market_regime_cached(),
-            )
-            conv_val = proxy.get("conviction")
-            b = cal_lookup(table.get("buckets", []), conv_val) if conv_val is not None else None
-            if b is not None and b.get("n"):
-                calibration = Calibration(
-                    available=True,
-                    as_of=table.get("generated_at"),
-                    horizon_days=table.get("horizon_days"),
-                    n=b["n"],
-                    bucket_label=b["label"],
-                    hit_rate=b["hit_rate"],
-                    avg_forward_return=b["avg_forward_return"],
-                    low_sample=b["n"] < 100,
-                    proxy_conviction=round(conv_val, 1),
-                    note="Timing signal (ex-fundamentals); S&P 100 history; overlapping windows.",
-                )
-            else:
-                calibration = Calibration(available=False, note="Calibration not built — run scripts/build_calibration.py")
-        else:
-            calibration = Calibration(available=False, note="Calibration not built — run scripts/build_calibration.py")
-    except Exception as e:
-        logger.debug("Calibration lookup failed for %s: %s", ticker, e)
-        calibration = Calibration(available=False, note="Calibration unavailable")
+        decision = None
 
     return FullStockAnalysis(
         ticker=ticker,
@@ -902,7 +890,6 @@ def _analyze_ticker(ticker: str, period: str) -> FullStockAnalysis:
         indicators=_build_indicators(hist_with_indicators) if hist_with_indicators is not None else None,
         valuation_tunnel=valuation_tunnel,
         decision=decision,
-        calibration=calibration,
         trading_signals=trading_signals_obj,
         risk_profile=risk_profile,
         news=_build_news(raw_news),

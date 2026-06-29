@@ -128,6 +128,7 @@ class Decision(BaseModel):
     quality: Quality
     setup: Setup
     read: str
+    action: str
 
 
 class TradingSignals(BaseModel):

@@ -17,7 +17,7 @@ from api.models.responses import (
     ShortInterestData, EarningsDate, RiskProfileData,
     VerdictSignalDetail, VerdictResponse, ValuationTunnel, Decision, Quality, Setup,
 )
-from utils.decision_engine import compute_conviction, quality_grade, read_line
+from utils.decision_engine import compute_conviction, quality_grade, read_line, decide_action
 from utils.market_breadth import get_market_regime_cached
 from utils.calibration import load_table, lookup as cal_lookup, percentile_of, band_for
 from api.utils.verdict import _compute_verdict
@@ -871,8 +871,11 @@ def _analyze_ticker(ticker: str, period: str) -> FullStockAnalysis:
             factors=[f for f in setup_raw["factors"] if f["label"] != "Fundamentals"],
             regime=setup_raw["regime"],
         )
-        decision = Decision(quality=quality, setup=setup,
-                            read=read_line(quality.grade, band, setup_raw["direction"]))
+        decision = Decision(
+            quality=quality, setup=setup,
+            read=read_line(quality.grade, band, setup_raw["direction"]),
+            action=decide_action(quality.grade, band, setup_raw["direction"]),
+        )
     except Exception as e:
         logger.debug("Decision build failed for %s: %s", ticker, e)
         decision = None

@@ -10,7 +10,7 @@ import { fmt, changeColor } from '../lib/formatters'
 import PageWrapper from '../components/layout/PageWrapper'
 import CandlestickChart from '../components/charts/CandlestickChart'
 import ValuationTunnelChart from '../components/charts/ValuationTunnelChart'
-import DecisionPanel from '../components/stocks/DecisionPanel'
+import { DecisionBar, SetupDrivers, PositionSizing } from '../components/stocks/DecisionParts'
 import MetricsTable from '../components/stocks/MetricsTable'
 import NewsPanel from '../components/stocks/NewsPanel'
 import { AiResearch } from '../components/stocks/AiResearch'
@@ -178,43 +178,6 @@ function PriceLadder({ signals }: { signals: NonNullable<FullStockAnalysis['trad
 }
 
 // ── Metrics strip (horizontal scroll) ────────────────────────────────────────
-function MetricPill({ label, value, color }: { label: string; value: string; color?: string }) {
-  return (
-    <div className="flex flex-col items-center px-4 py-2.5 rounded-xl shrink-0"
-      style={{ backgroundColor: '#111827', border: '1px solid rgba(255,255,255,0.06)', minWidth: 80 }}>
-      <span className="text-xs font-semibold uppercase tracking-wide mb-1 whitespace-nowrap" style={{ color: '#475569' }}>{label}</span>
-      <span className="text-sm font-black tabular-nums" style={{ color: color ?? '#e2e8f0' }}>{value}</span>
-    </div>
-  )
-}
-function MetricsStrip({ data }: { data: FullStockAnalysis }) {
-  const m = data.metrics; const r = data.risk_profile
-  const items: Array<{ label: string; value: string; color?: string }> = []
-  if (m?.pe_ratio != null)       items.push({ label: 'P/E',       value: m.pe_ratio.toFixed(1) + 'x',  color: m.pe_ratio < 25 ? '#00e676' : m.pe_ratio < 40 ? '#ffab00' : '#ff1744' })
-  if (m?.forward_pe != null)     items.push({ label: 'Fwd P/E',   value: m.forward_pe.toFixed(1) + 'x', color: m.forward_pe < 25 ? '#00e676' : m.forward_pe < 40 ? '#ffab00' : '#ff1744' })
-  if (m?.roe != null)            items.push({ label: 'ROE',        value: m.roe.toFixed(1) + '%',        color: m.roe > 15 ? '#00e676' : m.roe > 0 ? '#ffab00' : '#ff1744' })
-  if (m?.gross_margin != null)   items.push({ label: 'Grs Margin', value: m.gross_margin.toFixed(1) + '%', color: m.gross_margin > 40 ? '#00e676' : m.gross_margin > 20 ? '#ffab00' : '#ff1744' })
-  if (m?.revenue_growth != null) items.push({ label: 'Rev Growth', value: (m.revenue_growth > 0 ? '+' : '') + m.revenue_growth.toFixed(1) + '%', color: changeColor(m.revenue_growth) })
-  if (m?.earnings_growth != null) items.push({ label: 'EPS Growth', value: (m.earnings_growth > 0 ? '+' : '') + m.earnings_growth.toFixed(1) + '%', color: changeColor(m.earnings_growth) })
-  if (m?.beta != null)           items.push({ label: 'Beta',       value: m.beta.toFixed(2),             color: m.beta < 1.2 ? '#00e676' : '#ffab00' })
-  if (m?.market_cap != null)     items.push({ label: 'Mkt Cap',    value: fmt.mcap(m.market_cap) })
-  if (r?.sharpe_ratio != null)   items.push({ label: 'Sharpe',     value: r.sharpe_ratio.toFixed(2),     color: r.sharpe_ratio > 1 ? '#00e676' : r.sharpe_ratio > 0 ? '#ffab00' : '#ff1744' })
-  if (r?.var_5pct != null)       items.push({ label: 'VaR 5%',     value: r.var_5pct.toFixed(2) + '%',   color: r.var_5pct <= 2 ? '#00e676' : r.var_5pct <= 4 ? '#ffab00' : '#ff1744' })
-  if (r?.max_drawdown_pct != null) items.push({ label: 'Max DD',   value: r.max_drawdown_pct.toFixed(1) + '%', color: r.max_drawdown_pct <= 15 ? '#00e676' : r.max_drawdown_pct <= 30 ? '#ffab00' : '#ff1744' })
-  if (r?.volatility != null)     items.push({ label: 'Vol / yr',   value: r.volatility.toFixed(1) + '%', color: r.volatility <= 20 ? '#00e676' : r.volatility <= 35 ? '#ffab00' : '#ff1744' })
-  if (m?.dividend_yield != null && m.dividend_yield > 0) items.push({ label: 'Div Yield', value: m.dividend_yield.toFixed(2) + '%', color: '#00d4ff' })
-  if (items.length === 0) return null
-  return (
-    <div className="overflow-x-auto pb-1">
-      <div className="flex gap-2" style={{ minWidth: 'max-content' }}>
-        {items.map(({ label, value, color }) => (
-          <MetricPill key={label} label={label} value={value} color={color} />
-        ))}
-      </div>
-    </div>
-  )
-}
-
 // ── Deep research tabs ────────────────────────────────────────────────────────
 import EarningsPreview from '../components/stocks/EarningsPreview'
 import CatalystCalendar from '../components/stocks/CatalystCalendar'
@@ -524,19 +487,12 @@ export default function Analysis() {
             )}
 
             {/* ── Decision cockpit: verdict sidebar + chart ──────────────────── */}
-            {data.decision && (
-              <DecisionPanel
-                decision={data.decision}
-                entry={data.trading_signals?.optimal_entry ?? null}
-                stop={data.trading_signals?.stop_loss ?? null}
-                currentPrice={data.metrics?.current_price ?? data.ohlcv.at(-1)?.close ?? null}
-              />
-            )}
+            {data.decision && <DecisionBar decision={data.decision} />}
 
-            <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-4" data-testid="stock-header">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4" data-testid="stock-header">
 
-              {/* Left: Verdict & trade panel */}
-              <div className="flex flex-col gap-3">
+              {/* Right: Live rail (order-2 on lg) */}
+              <div className="flex flex-col gap-3 lg:col-span-4 order-2">
 
                 {/* Trade setup */}
                 {sig && (sig.optimal_entry != null || sig.stop_loss != null) && (
@@ -560,6 +516,13 @@ export default function Analysis() {
                         </span>
                       </div>
                     )}
+                  </div>
+                )}
+
+                {data.decision && (
+                  <div className="rounded-xl border p-4 flex flex-col gap-3" style={{ backgroundColor: '#111827', borderColor: 'rgba(255,255,255,0.06)' }}>
+                    <SetupDrivers setup={data.decision.setup} />
+                    <PositionSizing score={data.decision.setup.score} entry={data.trading_signals?.optimal_entry ?? null} stop={data.trading_signals?.stop_loss ?? null} currentPrice={data.metrics?.current_price ?? data.ohlcv.at(-1)?.close ?? null} />
                   </div>
                 )}
 
@@ -696,8 +659,8 @@ export default function Analysis() {
                 </div>
               </div>
 
-              {/* Right: Chart (dominant) */}
-              <div>
+              {/* Left: Chart (dominant, order-1 on lg) */}
+              <div className="lg:col-span-8 order-1">
                 {data.ohlcv.length > 0 && (
                   <CandlestickChart
                     ohlcv={data.ohlcv}
@@ -715,7 +678,7 @@ export default function Analysis() {
 
             {/* ── Valuation Tunnel ───────────────────────────────────────────── */}
             {data.valuation_tunnel && (
-              <div className="rounded-xl border p-5 flex flex-col gap-3"
+              <div className="rounded-xl border p-4 flex flex-col gap-2"
                 style={{ backgroundColor: '#111827', borderColor: 'rgba(255,255,255,0.06)' }}>
                 <div>
                   <h3 className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#475569' }}>
@@ -731,17 +694,6 @@ export default function Analysis() {
                   currentPrice={data.metrics?.current_price ?? data.ohlcv.at(-1)?.close}
                 />
               </div>
-            )}
-
-            {/* ── Metrics strip ──────────────────────────────────────────────── */}
-            <MetricsStrip data={data} />
-
-            {/* ── Analyst price target range ─────────────────────────────────── */}
-            {data.analyst_rating && (
-              <AnalystTargetChart
-                rating={data.analyst_rating}
-                currentPrice={data.metrics?.current_price ?? data.ohlcv.at(-1)?.close}
-              />
             )}
 
             {/* ── Deep research tabs ─────────────────────────────────────────── */}

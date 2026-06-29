@@ -11,7 +11,8 @@ import pandas as pd
 import yfinance as yf
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils.calibration import SP100, observations_for_history, bucketize, HORIZON_DAYS  # noqa: E402
+from utils.calibration import (SP100, observations_for_history, bucketize,  # noqa: E402
+                               conviction_percentiles, HORIZON_DAYS)
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _CACHE = os.path.join(_ROOT, "data", "cal_cache")
@@ -72,6 +73,7 @@ def main():
         "universe_size": covered,
         "failed": failed,
         "total_obs": len(all_obs),
+        "conviction_percentiles": conviction_percentiles(all_obs),
         "buckets": buckets,
     }
     os.makedirs(os.path.dirname(_OUT), exist_ok=True)

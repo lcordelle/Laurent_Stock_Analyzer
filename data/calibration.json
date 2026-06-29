@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-28",
+  "generated_at": "2026-06-29",
   "horizon_days": 30,
   "universe": "SP100",
   "universe_size": 98,
@@ -8,51 +8,137 @@
     "FI"
   ],
   "total_obs": 120050,
+  "conviction_percentiles": [
+    {
+      "p": 0,
+      "value": 1.5
+    },
+    {
+      "p": 5,
+      "value": 1.6
+    },
+    {
+      "p": 10,
+      "value": 1.7
+    },
+    {
+      "p": 15,
+      "value": 1.7
+    },
+    {
+      "p": 20,
+      "value": 1.8
+    },
+    {
+      "p": 25,
+      "value": 1.9
+    },
+    {
+      "p": 30,
+      "value": 2.0
+    },
+    {
+      "p": 35,
+      "value": 2.1
+    },
+    {
+      "p": 40,
+      "value": 2.2
+    },
+    {
+      "p": 45,
+      "value": 2.3
+    },
+    {
+      "p": 50,
+      "value": 2.4
+    },
+    {
+      "p": 55,
+      "value": 2.6
+    },
+    {
+      "p": 60,
+      "value": 2.7
+    },
+    {
+      "p": 65,
+      "value": 2.9
+    },
+    {
+      "p": 70,
+      "value": 3.1
+    },
+    {
+      "p": 75,
+      "value": 3.3
+    },
+    {
+      "p": 80,
+      "value": 3.5
+    },
+    {
+      "p": 85,
+      "value": 3.7
+    },
+    {
+      "p": 90,
+      "value": 4.0
+    },
+    {
+      "p": 95,
+      "value": 4.6
+    },
+    {
+      "p": 100,
+      "value": 8.8
+    }
+  ],
   "buckets": [
     {
       "label": "0\u20132",
       "lo": 0.0,
       "hi": 2.0,
-      "n": 28398,
-      "hit_rate": 51.8,
-      "avg_forward_return": 0.58,
-      "median_forward_return": 0.41
+      "n": 16271,
+      "hit_rate": 50.8,
+      "avg_forward_return": -0.05,
+      "median_forward_return": 0.16
     },
     {
       "label": "2\u20134",
       "lo": 2.0,
       "hi": 4.0,
-      "n": 29634,
-      "hit_rate": 50.6,
-      "avg_forward_return": 0.1,
-      "median_forward_return": 0.12
+      "n": 38562,
+      "hit_rate": 51.5,
+      "avg_forward_return": 0.53,
+      "median_forward_return": 0.35
     },
     {
       "label": "4\u20136",
       "lo": 4.0,
       "hi": 6.0,
-      "n": 3189,
-      "hit_rate": 58.1,
-      "avg_forward_return": 1.15,
-      "median_forward_return": 1.58
+      "n": 5697,
+      "hit_rate": 54.4,
+      "avg_forward_return": 0.65,
+      "median_forward_return": 0.83
     },
     {
       "label": "6\u20138",
       "lo": 6.0,
       "hi": 8.0,
-      "n": 20,
-      "hit_rate": 35.0,
-      "avg_forward_return": -0.32,
-      "median_forward_return": -1.49
+      "n": 306,
+      "hit_rate": 46.7,
+      "avg_forward_return": -0.44,
+      "median_forward_return": -1.0
     },
     {
       "label": "8\u201310",
       "lo": 8.0,
       "hi": 10.0,
-      "n": 12,
-      "hit_rate": 58.3,
-      "avg_forward_return": 0.89,
-      "median_forward_return": 3.73
+      "n": 416,
+      "hit_rate": 49.5,
+      "avg_forward_return": -0.36,
+      "median_forward_return": -0.07
     }
   ]
 }

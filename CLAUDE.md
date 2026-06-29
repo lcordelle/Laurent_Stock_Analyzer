@@ -13,13 +13,21 @@ Changing the port will break the LaunchAgent and `laurent.ngrok.io`.
 
 ## Public URL
 `https://laurent.ngrok.io` → always points to this app (port 8001)
-Managed by macOS LaunchAgent `com.virtualfusion.stock-analyzer` — runs at login,
-restarts automatically. Even when working on other projects, this stays up.
+Managed by **two** macOS LaunchAgents, each KeepAlive-supervised & run at login:
+- `com.virtualfusion.stock-analyzer.api` — execs uvicorn on :8001 (auto-restarts if it crashes)
+- `com.virtualfusion.stock-analyzer.tunnel` — execs ngrok → laurent.ngrok.io
+They are independent, so a restart of one never drops the other.
 
-## Run
+## Run / Deploy
 ```bash
-# Production (served via FastAPI):
-./start-permanent.sh          # starts FastAPI on 8001 + ngrok tunnel
+# Deploy code changes (rebuild frontend + cleanly reload backend) — the normal path:
+./deploy.sh
+
+# Restart just the backend (loads new Python code, deterministic, no race):
+launchctl kickstart -k "gui/$(id -u)/com.virtualfusion.stock-analyzer.api"
+
+# Manual all-in-one fallback (NOT the supervised path):
+./start-permanent.sh
 
 # Dev mode (hot reload):
 cd frontend && npm run dev    # Vite on :3000, proxies /api → :8001

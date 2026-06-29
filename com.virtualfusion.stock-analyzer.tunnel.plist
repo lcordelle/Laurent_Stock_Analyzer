@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.virtualfusion.stock-analyzer.tunnel</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-c</string>
+    <string>cd /Users/laurentcordelle/Projects/VirtualFusion_Stock_Analyzer &amp;&amp; exec ./run-tunnel.sh</string>
+  </array>
+  <key>WorkingDirectory</key><string>/Users/laurentcordelle/Projects/VirtualFusion_Stock_Analyzer</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>LimitLoadToSessionType</key><string>Aqua</string>
+  <key>EnvironmentVariables</key>
+  <dict><key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string></dict>
+  <key>StandardOutPath</key><string>/Users/laurentcordelle/Projects/VirtualFusion_Stock_Analyzer/logs/tunnel.log</string>
+  <key>StandardErrorPath</key><string>/Users/laurentcordelle/Projects/VirtualFusion_Stock_Analyzer/logs/tunnel.err</string>
+</dict>
+</plist>

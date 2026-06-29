@@ -103,13 +103,31 @@ class DecisionRegime(BaseModel):
     multiplier: float
 
 
-class Decision(BaseModel):
-    conviction: float
+class Quality(BaseModel):
+    score: Optional[int] = None
+    grade: Optional[str] = None
+
+
+class Setup(BaseModel):
+    score: float
     direction: str
+    percentile: Optional[float] = None
+    band: Optional[str] = None
+    hit_rate: Optional[float] = None
+    avg_forward_return: Optional[float] = None
+    n: Optional[int] = None
+    low_sample: Optional[bool] = None
+    as_of: Optional[str] = None
+    horizon_days: Optional[int] = None
+    expected_value_r: Optional[float] = None
     factors: list[DecisionFactor]
     regime: DecisionRegime
-    expected_value_r: Optional[float] = None
-    rationale: str
+
+
+class Decision(BaseModel):
+    quality: Quality
+    setup: Setup
+    read: str
 
 
 class TradingSignals(BaseModel):
@@ -190,19 +208,6 @@ class RiskProfileData(BaseModel):
     max_drawdown_pct: Optional[float] = None
 
 
-class Calibration(BaseModel):
-    available: bool
-    as_of: Optional[str] = None
-    horizon_days: Optional[int] = None
-    n: Optional[int] = None
-    bucket_label: Optional[str] = None
-    hit_rate: Optional[float] = None
-    avg_forward_return: Optional[float] = None
-    low_sample: Optional[bool] = None
-    proxy_conviction: Optional[float] = None
-    note: Optional[str] = None
-
-
 class FullStockAnalysis(BaseModel):
     ticker: str
     company_name: Optional[str] = None
@@ -216,7 +221,6 @@ class FullStockAnalysis(BaseModel):
     indicators: Optional[IndicatorData] = None
     valuation_tunnel: Optional["ValuationTunnel"] = None
     decision: Optional["Decision"] = None
-    calibration: Optional["Calibration"] = None
     trading_signals: Optional[TradingSignals] = None
     risk_profile: Optional[RiskProfileData] = None
     news: list[NewsArticle] = []

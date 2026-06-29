@@ -512,7 +512,6 @@ export default function Analysis() {
         {data && !data.error && (
           <div className="flex flex-col gap-4">
 
-            {/* ── Verdict banner ─────────────────────────────────────────────── */}
 
             {/* ── Company description ────────────────────────────────────────── */}
             {data.description && (

@@ -111,3 +111,24 @@ def test_read_line_aligned_strong():
 def test_read_line_low_quality():
     s = read_line("F", "Strong", "Long")
     assert "weak" in s.lower() or "poor" in s.lower() or "caution" in s.lower() or "trade" in s.lower()
+
+
+from utils.decision_engine import decide_action
+
+
+def test_decide_action_matrix():
+    assert decide_action("A", "Prime", "Long") == "STRONG BUY"
+    assert decide_action("B", "Strong", "Long") == "BUY"
+    assert decide_action("A", "Fair", "Long") == "ACCUMULATE"
+    assert decide_action("A", "Weak", "Long") == "WATCH"
+    assert decide_action("C", "Strong", "Long") == "BUY"
+    assert decide_action("C", "Fair", "Long") == "WATCH"
+    assert decide_action("F", "Prime", "Long") == "SPECULATIVE"
+    assert decide_action("D", "Weak", "Long") == "AVOID"
+
+
+def test_decide_action_direction_and_missing():
+    assert decide_action("A", "Prime", "Short") == "AVOID"
+    assert decide_action("A", "Strong", "Stand aside") == "WATCH"
+    assert decide_action(None, "Strong", "Long") == "WATCH"
+    assert decide_action("A", None, "Long") == "WATCH"

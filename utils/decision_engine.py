@@ -154,3 +154,23 @@ def read_line(grade: Optional[str], setup_band: Optional[str], direction: str) -
     if s_good:
         return f"Average quality with a strong {direction.lower()} setup — a timing trade."
     return "Average quality and a soft setup — no edge; wait for a better entry."
+
+
+def decide_action(grade: Optional[str], band: Optional[str], direction: str) -> str:
+    if direction == "Short":
+        return "AVOID"
+    if direction == "Stand aside":
+        return "WATCH"
+    if grade is None or band is None:
+        return "WATCH"
+    if grade in ("A", "B"):
+        if band == "Prime":
+            return "STRONG BUY"
+        if band == "Strong":
+            return "BUY"
+        if band == "Fair":
+            return "ACCUMULATE"
+        return "WATCH"
+    if grade == "C":
+        return "BUY" if band in ("Prime", "Strong") else "WATCH"
+    return "SPECULATIVE" if band in ("Prime", "Strong") else "AVOID"

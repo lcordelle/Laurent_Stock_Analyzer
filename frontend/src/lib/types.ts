@@ -44,27 +44,18 @@ export interface DecisionFactor {
   label: string; subscore: number | null; weight: number
   contribution: number | null; detail: string
 }
-export interface Decision {
-  conviction: number
+export interface Quality { score: number | null; grade: string | null }
+export interface Setup {
+  score: number
   direction: 'Long' | 'Short' | 'Stand aside'
+  percentile: number | null; band: string | null
+  hit_rate: number | null; avg_forward_return: number | null; n: number | null
+  low_sample: boolean | null; as_of: string | null; horizon_days: number | null
+  expected_value_r: number | null
   factors: DecisionFactor[]
   regime: { label: string; vix: number | null; multiplier: number }
-  expected_value_r: number | null
-  rationale: string
 }
-
-export interface Calibration {
-  available: boolean
-  as_of?: string | null
-  horizon_days?: number | null
-  n?: number | null
-  bucket_label?: string | null
-  hit_rate?: number | null
-  avg_forward_return?: number | null
-  low_sample?: boolean | null
-  proxy_conviction?: number | null
-  note?: string | null
-}
+export interface Decision { quality: Quality; setup: Setup; read: string }
 
 export interface RiskProfile {
   volatility?: number
@@ -112,7 +103,6 @@ export interface FullStockAnalysis {
   forecast?: ForecastResult; indicators?: IndicatorData
   valuation_tunnel?: ValuationTunnel
   decision?: Decision
-  calibration?: Calibration
   trading_signals?: {
     signal?: string; confidence?: number
     optimal_entry?: number; stop_loss?: number

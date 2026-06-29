@@ -55,7 +55,7 @@ export interface Setup {
   factors: DecisionFactor[]
   regime: { label: string; vix: number | null; multiplier: number }
 }
-export interface Decision { quality: Quality; setup: Setup; read: string }
+export interface Decision { quality: Quality; setup: Setup; read: string; action: string }
 
 export interface RiskProfile {
   volatility?: number

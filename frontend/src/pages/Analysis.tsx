@@ -6,7 +6,7 @@ import { stockApi } from '../services/api'
 import { addRecentTicker } from './Home'
 import { addToWatchlist, removeFromWatchlist, isInWatchlist } from '../lib/watchlist'
 import type { FullStockAnalysis } from '../lib/types'
-import { fmt, scoreColor, changeColor } from '../lib/formatters'
+import { fmt, changeColor } from '../lib/formatters'
 import PageWrapper from '../components/layout/PageWrapper'
 import CandlestickChart from '../components/charts/CandlestickChart'
 import ValuationTunnelChart from '../components/charts/ValuationTunnelChart'
@@ -146,62 +146,6 @@ function sigColor(s?: string | null) {
   if (s.includes('SELL')) return '#ff1744'
   return '#ffab00'
 }
-function tierColor(tier: string) {
-  if (tier === 'STRONG BUY') return '#00e676'
-  if (tier === 'BUY')        return '#69f0ae'
-  if (tier === 'WATCH')      return '#ffab00'
-  return '#ff1744'
-}
-function computeTier(signal?: string | null, score?: number, confidence?: number): string {
-  const s = (signal ?? '').toUpperCase()
-  if (s.includes('SELL')) return 'AVOID'
-  if (!s.includes('BUY')) return 'WATCH'
-  const c = (score ?? 0) * 0.6 + (confidence ?? 0) * 0.4
-  return c >= 75 ? 'STRONG BUY' : 'BUY'
-}
-function computeWhyNow(
-  score: number, signal?: string | null, rsi?: number | null, macd?: string | null,
-  momentum?: number | null, _roe?: number | null, gm?: number | null,
-  rg?: number | null, upside?: number | null
-): string {
-  const sig = signal ?? ''; const r = rsi ?? 50
-  if (score >= 80 && sig.includes('BUY'))  return 'Elite fundamentals aligned with bullish technicals — rare high-conviction setup'
-  if (r < 35 && score >= 60)              return 'Technically oversold with strong fundamentals — asymmetric reversal opportunity'
-  if (r < 45 && macd === 'BULLISH' && score >= 65) return 'Momentum turning bullish while still early in the move — ideal entry zone'
-  if (momentum != null && momentum < 25 && score >= 70) return 'Near 52-week lows with premium fundamentals — deep value entry point'
-  if (upside != null && upside > 20 && score >= 60) return `Analyst consensus implies ${upside.toFixed(0)}% upside — significant margin of safety`
-  if (rg != null && rg > 25 && score >= 70) return `${rg.toFixed(0)}% revenue growth with high-quality fundamentals — growth at a reasonable price`
-  if (sig.includes('STRONG BUY')) return 'Technical scoring at maximum bullish extreme — high-momentum entry'
-  if (score >= 75 && sig.includes('HOLD')) return 'World-class business at fair value — accumulate on weakness'
-  if (gm != null && gm > 60 && score >= 65) return `${gm.toFixed(0)}% gross margins signal structural pricing power — quality compounder`
-  return 'Solid fundamentals with improving technical picture — monitor for entry'
-}
-function computeDrivers(
-  components: Record<string, number>,
-  gm?: number | null, roe?: number | null, rg?: number | null, pe?: number | null,
-  rsi?: number | null, macd?: string | null, trend?: string | null,
-  momentum?: number | null, upside?: number | null
-): string[] {
-  const d: string[] = []
-  const gmPts = components['Gross Margin'] ?? 0
-  if (gmPts === 25 && gm) d.push(`Gross margin ${gm.toFixed(0)}% — elite pricing power`)
-  else if (gmPts >= 15 && gm) d.push(`Gross margin ${gm.toFixed(0)}% — above-average profitability`)
-  const roePts = components['ROE'] ?? 0
-  if (roePts === 20 && roe) d.push(`ROE ${roe.toFixed(0)}% — exceptional capital efficiency`)
-  else if (roePts >= 15 && roe) d.push(`ROE ${roe.toFixed(0)}% — strong returns on equity`)
-  if ((components['Valuation'] ?? 0) === 20 && pe) d.push(`P/E ${pe.toFixed(1)}x — attractive valuation`)
-  if ((components['Growth'] ?? 0) >= 10 && rg) d.push(`Revenue growth +${rg.toFixed(0)}% — expanding top line`)
-  if (rsi != null && rsi < 30) d.push(`RSI ${rsi.toFixed(0)} — technically oversold`)
-  else if (rsi != null && rsi < 40) d.push(`RSI ${rsi.toFixed(0)} — approaching oversold`)
-  if (macd === 'BULLISH' && (trend === 'UPTREND' || trend === 'STRONG UPTREND')) d.push('MACD bullish + uptrend confirmed')
-  else if (macd === 'BULLISH') d.push('MACD crossover bullish')
-  if (momentum != null && momentum < 25) d.push(`${momentum.toFixed(0)}% of 52w range — deep value entry`)
-  else if (momentum != null && momentum > 80) d.push(`${momentum.toFixed(0)}% of 52w range — breakout momentum`)
-  if (upside != null && upside > 25) d.push(`Analyst consensus +${upside.toFixed(0)}% upside`)
-  else if (upside != null && upside > 15) d.push(`Analyst target +${upside.toFixed(0)}% upside`)
-  return d.slice(0, 3)
-}
-
 // ── Price ladder ──────────────────────────────────────────────────────────────
 function PriceLadder({ signals }: { signals: NonNullable<FullStockAnalysis['trading_signals']> }) {
   const { optimal_entry: entry, stop_loss: sl, tp1, tp2, tp3 } = signals
@@ -275,7 +219,6 @@ function MetricsStrip({ data }: { data: FullStockAnalysis }) {
 import EarningsPreview from '../components/stocks/EarningsPreview'
 import CatalystCalendar from '../components/stocks/CatalystCalendar'
 import ValuationTools from '../components/stocks/ValuationTools'
-import VerdictBanner from '../components/stocks/VerdictBanner'
 
 type Tab = 'fundamentals' | 'earnings' | 'news' | 'ai' | 'valuation' | 'catalysts'
 
@@ -417,8 +360,6 @@ export default function Analysis() {
   const sig = data?.trading_signals
   const rat = data?.analyst_rating
   const rsk = data?.risk_profile
-  const sco = data?.score
-  const fct = data?.forecast
 
   const currentPrice  = met?.current_price
   const prevClose     = data?.ohlcv?.[data.ohlcv.length - 2]?.close
@@ -436,12 +377,6 @@ export default function Analysis() {
     ? (rat.target_mean - currentPrice) / currentPrice * 100
     : null
 
-  const tier    = computeTier(signal, sco?.total, sig?.confidence)
-  const whyNow  = computeWhyNow(sco?.total ?? 0, signal, sig?.rsi_value, sig?.macd_signal,
-                    momentum52, met?.roe, met?.gross_margin, met?.revenue_growth, analystUpside)
-  const drivers = computeDrivers(sco?.components ?? {}, met?.gross_margin, met?.roe,
-                    met?.revenue_growth, met?.pe_ratio, sig?.rsi_value, sig?.macd_signal,
-                    sig?.trend_strength, momentum52, analystUpside)
 
   const recentNewsCount = (data?.news ?? []).filter(n => {
     if (!n.published) return false
@@ -578,7 +513,6 @@ export default function Analysis() {
           <div className="flex flex-col gap-4">
 
             {/* ── Verdict banner ─────────────────────────────────────────────── */}
-            {ticker && <VerdictBanner ticker={ticker} period={period} />}
 
             {/* ── Company description ────────────────────────────────────────── */}
             {data.description && (
@@ -604,73 +538,6 @@ export default function Analysis() {
 
               {/* Left: Verdict & trade panel */}
               <div className="flex flex-col gap-3">
-
-                {/* Verdict card */}
-                <div className="rounded-xl border p-4 flex flex-col gap-3"
-                  style={{ backgroundColor: '#111827', borderColor: `${sc}25` }}>
-
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <div className="text-xs uppercase tracking-widest mb-0.5" style={{ color: '#475569' }}>Tech Signal</div>
-                      <div className="text-2xl font-black tracking-tight" style={{ color: sc }}>{signal ?? '—'}</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-3xl font-black" style={{ color: scoreColor(sco?.total ?? 0) }}>{sco?.total ?? '—'}</div>
-                      <div className="text-xs" style={{ color: '#475569' }}>VF Score</div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs font-bold px-2.5 py-1 rounded-lg"
-                      style={{ backgroundColor: `${tierColor(tier)}20`, color: tierColor(tier) }}>{tier}</span>
-                    {sig?.signal_quality && (() => {
-                      const qc = sig.signal_quality === 'PRIME' ? '#ffd700' : sig.signal_quality === 'CONFIRMED' ? '#00e676' : sig.signal_quality === 'STANDARD' ? '#ffab00' : '#475569'
-                      return <span className="text-xs font-bold px-2 py-0.5 rounded" style={{ backgroundColor: `${qc}15`, color: qc }}>
-                        {sig.signal_quality}
-                        {sig.signal_quality === 'PRIME' ? ' ★' : ''}
-                      </span>
-                    })()}
-                    {sig?.earnings_proximity && (
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded" style={{ backgroundColor: '#ff174415', color: '#ff1744' }}>
-                        ⚠ EARNINGS {sig.earnings_proximity}
-                      </span>
-                    )}
-                    {sig?.confidence != null && (
-                      <div className="flex items-center gap-1.5 flex-1">
-                        <div className="flex-1 bg-white/10 rounded-full h-1.5">
-                          <div className="h-1.5 rounded-full" style={{ width: `${sig.confidence}%`, background: `linear-gradient(90deg, ${sc}80, ${sc})` }} />
-                        </div>
-                        <span className="text-xs font-bold tabular-nums w-8 text-right" style={{ color: '#94a3b8' }}>{sig.confidence}%</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {fct && (
-                    <div className="flex items-center justify-between text-xs px-2.5 py-2 rounded-lg"
-                      style={{ backgroundColor: '#0a0e1a' }}>
-                      <span style={{ color: '#475569' }}>AI Forecast</span>
-                      <span className="font-bold" style={{ color: changeColor(fct.forecast_change_pct) }}>
-                        {fmt.price(fct.forecast_price)}{fct.forecast_change_pct != null && ` (${fct.forecast_change_pct >= 0 ? '+' : ''}${fct.forecast_change_pct.toFixed(1)}%)`}
-                      </span>
-                    </div>
-                  )}
-
-                  <div className="rounded-lg px-3 py-2 text-xs leading-relaxed"
-                    style={{ backgroundColor: '#0a0e1a', color: '#94a3b8', borderLeft: `2px solid ${sc}` }}>
-                    {whyNow}
-                  </div>
-
-                  {drivers.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {drivers.map((d, i) => (
-                        <span key={i} className="text-xs px-2 py-0.5 rounded-full"
-                          style={{ backgroundColor: '#00d4ff10', color: '#94a3b8', border: '1px solid rgba(0,212,255,0.12)' }}>
-                          {d}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
 
                 {/* Trade setup */}
                 {sig && (sig.optimal_entry != null || sig.stop_loss != null) && (

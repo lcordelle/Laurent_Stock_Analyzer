@@ -12,6 +12,7 @@ interface Props {
 const GRADE_COLOR: Record<string, string> = { A: '#00e676', B: '#84cc16', C: '#ffab00', D: '#ff7043', F: '#ff1744' }
 const BAND_COLOR: Record<string, string> = { Prime: '#00e676', Strong: '#84cc16', Fair: '#ffab00', Weak: '#ff7043' }
 const DIR_COLOR: Record<string, string> = { Long: '#00e676', Short: '#ff1744', 'Stand aside': '#ffab00' }
+const ACTION_COLOR: Record<string, string> = { 'STRONG BUY': '#00e676', BUY: '#00e676', ACCUMULATE: '#84cc16', WATCH: '#ffab00', SPECULATIVE: '#ff7043', AVOID: '#ff1744' }
 
 function num(v: string, fallback: number): number {
   const n = parseFloat(v.replace(/[^0-9.]/g, '')); return isNaN(n) ? fallback : n
@@ -23,7 +24,7 @@ export default function DecisionPanel({ decision, entry, stop, currentPrice }: P
   const saveEquity = (v: number) => { setEquity(v); localStorage.setItem('decision.accountSize', String(v)) }
   const saveRisk = (v: number) => { setMaxRisk(v); localStorage.setItem('decision.maxRiskPct', String(v)) }
 
-  const { quality, setup, read } = decision
+  const { quality, setup, read, action } = decision
   const gColor = GRADE_COLOR[quality.grade ?? ''] ?? '#94a3b8'
   const bColor = BAND_COLOR[setup.band ?? ''] ?? '#94a3b8'
   const dColor = DIR_COLOR[setup.direction] ?? '#94a3b8'
@@ -33,7 +34,10 @@ export default function DecisionPanel({ decision, entry, stop, currentPrice }: P
 
   return (
     <div className="rounded-xl border p-5 flex flex-col gap-4" style={{ backgroundColor: '#111827', borderColor: 'rgba(255,255,255,0.06)' }}>
-      <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#475569' }}>Decision</span>
+      <div className="flex items-start gap-3 flex-wrap">
+        <span className="text-2xl font-black px-3 py-1 rounded-lg" style={{ backgroundColor: (ACTION_COLOR[action] ?? '#94a3b8') + '22', color: ACTION_COLOR[action] ?? '#94a3b8' }}>{action}</span>
+        <span className="text-sm flex-1" style={{ color: '#cbd5e1', minWidth: '12rem' }}>{read}</span>
+      </div>
 
       {/* Two axes */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -67,11 +71,6 @@ export default function DecisionPanel({ decision, entry, stop, currentPrice }: P
             </span>
           )}
         </div>
-      </div>
-
-      {/* Read */}
-      <div className="text-sm flex items-start gap-2" style={{ color: '#cbd5e1' }}>
-        <span style={{ color: '#475569' }}>▸</span><span>{read}</span>
       </div>
 
       {/* Setup drivers */}

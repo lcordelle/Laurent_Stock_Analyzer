@@ -217,18 +217,18 @@ function DeepTabs({ data, period: _period, onPeriodChange: _onPeriodChange }: {
       </div>
       <div className="p-5 flex flex-col gap-5" style={{ backgroundColor: '#0d1117' }}>
         {tab === 'fundamentals' && (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+            <div className="flex flex-col gap-4">
               {data.score && <ScoreCard score={data.score} />}
-              {data.score && <ScoreGauge score={data.score.total} />}
+              {data.metrics && <MetricsTable metrics={data.metrics} shortInterest={data.short_interest} />}
+              {data.risk_profile && <RiskProfile riskProfile={data.risk_profile} ticker={data.ticker} />}
             </div>
-            {data.metrics && <MetricsTable metrics={data.metrics} shortInterest={data.short_interest} />}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="flex flex-col gap-4">
+              {data.score && <ScoreGauge score={data.score.total} />}
               <FactorGrades ticker={data.ticker} sector={data.sector ?? ''} />
               <DividendScorecard ticker={data.ticker} sector={data.sector ?? ''} />
             </div>
-            {data.risk_profile && <RiskProfile riskProfile={data.risk_profile} ticker={data.ticker} />}
-          </>
+          </div>
         )}
         {tab === 'earnings' && (
           <>

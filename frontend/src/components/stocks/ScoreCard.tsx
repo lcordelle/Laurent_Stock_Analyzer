@@ -10,11 +10,11 @@ const COMPONENT_MAX: Record<string, number> = {
 }
 
 const RECOMMENDATION_LABELS: [number, string][] = [
-  [75, 'Strong Buy'],
-  [60, 'Buy'],
-  [45, 'Hold'],
-  [30, 'Reduce'],
-  [0, 'Sell'],
+  [75, 'Elite'],
+  [60, 'Strong'],
+  [45, 'Fair'],
+  [30, 'Weak'],
+  [0, 'Poor'],
 ]
 
 function getRecommendation(score: number): string {
@@ -25,11 +25,11 @@ function getRecommendation(score: number): string {
 }
 
 const REC_COLORS: Record<string, string> = {
-  'Strong Buy': '#00e676',
-  'Buy': '#00e676',
-  'Hold': '#ffab00',
-  'Reduce': '#ff1744',
-  'Sell': '#ff1744',
+  'Elite': '#00e676',
+  'Strong': '#84cc16',
+  'Fair': '#ffab00',
+  'Weak': '#ff7043',
+  'Poor': '#ff1744',
 }
 
 interface ScoreCardProps {

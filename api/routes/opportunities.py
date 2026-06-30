@@ -11,9 +11,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from api.auth import verify_token
 from api.routes.stocks import _compute_trading_signals, _analyze_ticker
-from api.utils.verdict import _compute_verdict
-from api.models.responses import RadarStock, RadarResponse
+from api.utils.verdict import _catalyst_info
+from api.models.responses import RadarStock, RadarResponse, RadarHorizon, DecisionRegime
 from utils.stock_analyzer import StockAnalyzer
+from utils.decision_engine import action_urgency, size_cap_pct, ACTION_RANK, REGIME_MULT
+from utils.market_breadth import get_market_regime_cached
 
 router = APIRouter(tags=["opportunities"])
 logger = logging.getLogger(__name__)
@@ -96,6 +98,10 @@ def _restore_radar_cache_from_disk() -> None:
         data = json.loads(_RADAR_DISK_PATH.read_text())
         stocks = data.get("stocks", [])
         if len(stocks) == 0:
+            return
+        # Discard a stale-shape cache (pre-v2 verdict schema) so it re-scans cleanly.
+        if "horizons" not in stocks[0]:
+            logger.info("Ignoring legacy-shape radar disk cache; will re-scan")
             return
         _radar_cache = stocks
         _radar_cache_ts = data.get("cached_at", 0)
@@ -756,15 +762,24 @@ class MarketOpportunitiesResponse(BaseModel):
     domain_stats: dict[str, DomainStat] = {}
 
 
-def _action_urgency(entry_timing: str, verdict: str) -> str:
-    """Classify a stock into ACT_NOW / WATCH / REST for the decision board."""
-    is_buy = "BUY" in verdict
-    enters = entry_timing.startswith("ENTER") or entry_timing.startswith("SCALE")
-    if is_buy and enters:
-        return "ACT_NOW"
-    if is_buy or (verdict == "HOLD" and entry_timing not in ("DO NOT ENTER",)):
-        return "WATCH"
-    return "REST"
+def _current_regime() -> Optional[DecisionRegime]:
+    """Market-level regime for the radar banner (label + VIX + base multiplier)."""
+    try:
+        reg = get_market_regime_cached()
+        if not reg:
+            return None
+        label = reg.get("regime") or "Unknown"
+        return DecisionRegime(label=label, vix=reg.get("vix"), multiplier=REGIME_MULT.get(label, 1.0))
+    except Exception:
+        return None
+
+
+def _radar_sort_key(s: RadarStock):
+    """Rank by the default horizon's action, then quality, then entry-timing percentile."""
+    hd = s.horizons.get(s.default_horizon) or next(iter(s.horizons.values()), None)
+    rank = ACTION_RANK.get(hd.action, -1) if hd else -1
+    pct = hd.percentile if (hd and hd.percentile is not None) else -1
+    return (rank, s.quality_score or -1, pct)
 
 
 def _safe_float_radar(v) -> Optional[float]:
@@ -779,11 +794,8 @@ def _safe_float_radar(v) -> Optional[float]:
         return None
 
 
-_RADAR_FLOAT_FIELDS = (
-    "price", "price_target", "price_target_bear", "price_target_bull",
-    "stop_loss", "analyst_upside", "risk_reward", "ai_price_target",
-    "position_size_pct",
-)
+_RADAR_FLOAT_FIELDS = ("price", "analyst_upside", "fair_value_gap_pct")
+_RADAR_HORIZON_FLOAT_FIELDS = ("percentile", "conviction", "size_cap_pct")
 
 
 def _sanitize_radar_dict(s: dict) -> dict:
@@ -792,59 +804,79 @@ def _sanitize_radar_dict(s: dict) -> dict:
     for field in _RADAR_FLOAT_FIELDS:
         if field in out:
             out[field] = _safe_float_radar(out[field])
-    if "entry_price_zone" in out and out["entry_price_zone"] is not None:
-        out["entry_price_zone"] = [_safe_float_radar(v) for v in out["entry_price_zone"]]
+    horizons = out.get("horizons")
+    if isinstance(horizons, dict):
+        clean = {}
+        for hkey, h in horizons.items():
+            h = dict(h)
+            for field in _RADAR_HORIZON_FLOAT_FIELDS:
+                if field in h:
+                    h[field] = _safe_float_radar(h[field])
+            if h.get("conviction") is None:
+                h["conviction"] = 0.0
+            clean[hkey] = h
+        out["horizons"] = clean
     return out
 
 
 async def _full_scan_ticker(ticker: str, domain: Optional[str] = None) -> Optional[RadarStock]:
-    """Full analysis + verdict for a single ticker. Returns RadarStock or None on error."""
+    """Build a RadarStock from the unified decision (same engine as the single-stock page).
+
+    No separate verdict is computed — ``analysis.decision`` is already produced by
+    ``_analyze_ticker``; the radar renders it so radar verdicts cannot drift from the
+    Analysis page. Returns None (skip) when the decision can't be built.
+    """
     try:
         loop = asyncio.get_running_loop()
         analysis = await loop.run_in_executor(None, _analyze_ticker, ticker, "1y")
-        if analysis.error:
+        if analysis.error or analysis.decision is None:
             return None
-        verdict = _compute_verdict(analysis)
+        dec = analysis.decision
         price = _safe_float_radar(analysis.metrics.current_price if analysis.metrics else None)
 
         analyst_upside = None
         if (analysis.analyst_rating and analysis.analyst_rating.target_mean is not None
                 and price and price > 0):
-            raw_up = (analysis.analyst_rating.target_mean - price) / price * 100
-            analyst_upside = _safe_float_radar(round(raw_up, 1))
+            analyst_upside = _safe_float_radar(round((analysis.analyst_rating.target_mean - price) / price * 100, 1))
 
-        sig = analysis.trading_signals
-        ai_price_target = _safe_float_radar(
-            round(analysis.forecast.forecast_price, 2)
-            if analysis.forecast and analysis.forecast.forecast_price else None
-        )
+        # fair-value gap: price vs the valuation-tunnel midline (latest)
+        fair_value_gap_pct = None
+        vt = analysis.valuation_tunnel
+        if vt and price and price > 0:
+            mids = [m for m in vt.hist_mid if m is not None]
+            if mids and mids[-1]:
+                fair_value_gap_pct = _safe_float_radar(round((price / mids[-1] - 1.0) * 100, 1))
 
-        urgency = _action_urgency(verdict.entry_timing, verdict.verdict)
+        catalyst_event, catalyst_days = _catalyst_info(analysis.earnings_dates)
+
+        horizons = {}
+        for hkey, hd in dec.horizons.items():
+            s = hd.setup
+            horizons[hkey] = RadarHorizon(
+                action=hd.action,
+                read=hd.read,
+                band=s.band,
+                percentile=_safe_float_radar(s.percentile),
+                conviction=_safe_float_radar(s.score) or 0.0,
+                direction=s.direction,
+                urgency=action_urgency(hd.action),
+                size_cap_pct=size_cap_pct(s.score),
+                horizon_days=s.horizon_days,
+            )
 
         return RadarStock(
             ticker=ticker,
             name=analysis.company_name,
             domain=domain,
             price=price,
-            verdict=verdict.verdict,
-            composite=verdict.vf_score,
-            confidence=verdict.confidence,
-            signals=verdict.signals,
-            why=verdict.why,
-            price_target=verdict.price_target,
-            price_target_bear=verdict.price_target_bear,
-            price_target_bull=verdict.price_target_bull,
-            stop_loss=verdict.stop_loss,
+            quality_score=dec.quality.score,
+            quality_grade=dec.quality.grade,
+            default_horizon=dec.default_horizon,
+            horizons=horizons,
             analyst_upside=analyst_upside,
-            risk_reward=_safe_float_radar(sig.risk_reward if sig else None),
-            ai_price_target=ai_price_target,
-            entry_timing=verdict.entry_timing,
-            entry_price_zone=verdict.entry_price_zone,
-            action_urgency=urgency,
-            catalyst_event=verdict.catalyst_event,
-            catalyst_days=verdict.catalyst_days,
-            conflict_note=verdict.conflict_note,
-            position_size_pct=verdict.position_size_pct,
+            catalyst_event=catalyst_event,
+            catalyst_days=catalyst_days,
+            fair_value_gap_pct=fair_value_gap_pct,
         )
     except Exception as e:
         logger.debug("_full_scan_ticker failed for %s: %s", ticker, e)
@@ -885,7 +917,7 @@ async def _two_pass_scan() -> list:
 
         results = await asyncio.gather(*[fetch_full(t, d) for t, d in top_tickers], return_exceptions=True)
         stocks = [r for r in results if isinstance(r, RadarStock)]
-        stocks.sort(key=lambda s: s.composite, reverse=True)
+        stocks.sort(key=_radar_sort_key, reverse=True)
 
         duration = round(time.time() - t_start, 1)
         logger.info("Radar scan complete — %d stocks ranked in %.1fs", len(stocks), duration)
@@ -1071,6 +1103,7 @@ async def get_radar(_: str = Depends(verify_token)):
         total_scanned=_cache.get("total_scanned", 0) if _cache else 0,
         shortlist_count=len(stocks),
         cached_at=_radar_cache_ts,
+        regime=_current_regime(),
     )
 
 
@@ -1087,6 +1120,7 @@ async def refresh_radar(_: str = Depends(verify_token)):
             total_scanned=_cache.get("total_scanned", 0) if _cache else 0,
             shortlist_count=len(stocks),
             cached_at=_radar_cache_ts,
+            regime=_current_regime(),
         )
     raise HTTPException(503, detail="Radar scan warming, retry in a few seconds")
 
@@ -1110,7 +1144,7 @@ async def custom_radar(body: CustomRadarRequest, _: str = Depends(verify_token))
 
     results = await asyncio.gather(*[fetch(t) for t in tickers], return_exceptions=True)
     stocks = [r for r in results if isinstance(r, RadarStock)]
-    stocks.sort(key=lambda s: s.composite, reverse=True)
+    stocks.sort(key=_radar_sort_key, reverse=True)
 
     return RadarResponse(
         mode="custom",
@@ -1118,4 +1152,5 @@ async def custom_radar(body: CustomRadarRequest, _: str = Depends(verify_token))
         total_scanned=len(tickers),
         shortlist_count=len(stocks),
         scan_duration_seconds=round(time.time() - t_start, 1),
+        regime=_current_regime(),
     )

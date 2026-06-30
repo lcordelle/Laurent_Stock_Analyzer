@@ -342,31 +342,32 @@ class VerdictResponse(BaseModel):
     conflict_note: Optional[str] = None
 
 
+class RadarHorizon(BaseModel):
+    action: str
+    read: str
+    band: Optional[str] = None
+    percentile: Optional[float] = None
+    conviction: float
+    direction: str
+    urgency: str                     # ACT_NOW | WATCH | REST
+    size_cap_pct: Optional[float] = None
+    horizon_days: Optional[int] = None
+
+
 class RadarStock(BaseModel):
     ticker: str
     name: Optional[str] = None
     domain: Optional[str] = None
     price: Optional[float] = None
-    verdict: str
-    composite: int
-    confidence: int
-    signals: dict[str, VerdictSignalDetail]
-    why: str
-    price_target: Optional[float] = None
-    price_target_bear: Optional[float] = None
-    price_target_bull: Optional[float] = None
-    stop_loss: Optional[float] = None
+    quality_score: Optional[int] = None
+    quality_grade: Optional[str] = None
+    default_horizon: str = "swing"
+    horizons: dict[str, RadarHorizon]
+    # supporting context (horizon-independent; informs, never overrides)
     analyst_upside: Optional[float] = None
-    risk_reward: Optional[float] = None
-    ai_price_target: Optional[float] = None
-    # decision layer
-    entry_timing: str = "EVALUATE"
-    entry_price_zone: Optional[list[float]] = None
-    action_urgency: str = "WATCH"   # ACT_NOW | WATCH | REST
     catalyst_event: Optional[str] = None
     catalyst_days: Optional[int] = None
-    conflict_note: Optional[str] = None
-    position_size_pct: Optional[float] = None
+    fair_value_gap_pct: Optional[float] = None
 
 
 class RadarResponse(BaseModel):
@@ -376,3 +377,4 @@ class RadarResponse(BaseModel):
     shortlist_count: int
     cached_at: Optional[float] = None
     scan_duration_seconds: Optional[float] = None
+    regime: Optional[DecisionRegime] = None

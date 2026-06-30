@@ -21,7 +21,8 @@ router = APIRouter(tags=["opportunities"])
 logger = logging.getLogger(__name__)
 
 _analyzer = StockAnalyzer()
-_SEM = asyncio.Semaphore(6)  # low concurrency to avoid yfinance rate-limits
+_SEM = asyncio.Semaphore(6)       # quick-scan concurrency (light per-ticker fetches)
+_FULL_SEM = asyncio.Semaphore(3)  # pass-2 / custom: full analysis is much heavier — throttle harder
 
 _YF_INFO_CACHE = Path.home() / '.cache' / 'stock_analyzer' / 'yf_cache'
 _YF_INFO_CACHE.mkdir(parents=True, exist_ok=True)
@@ -897,6 +898,26 @@ async def _full_scan_ticker(ticker: str, domain: Optional[str] = None) -> Option
         return None
 
 
+async def _full_scan_with_retry(ticker: str, domain: Optional[str] = None,
+                                stagger: float = 0.0, retries: int = 1,
+                                backoff: float = 2.5) -> Optional[RadarStock]:
+    """Throttled full scan with one backoff retry to ride out transient Yahoo rate-limits.
+
+    A None result (rate-limit OR genuinely no decision) triggers up to ``retries``
+    re-attempts after ``backoff`` seconds; this recovers most 401/crumb throttles
+    without much cost, since real misses (delisted) simply return None again.
+    """
+    async with _FULL_SEM:
+        if stagger:
+            await asyncio.sleep(stagger)
+        for attempt in range(retries + 1):
+            res = await _full_scan_ticker(ticker, domain)
+            if res is not None or attempt == retries:
+                return res
+            await asyncio.sleep(backoff)
+    return None
+
+
 async def _two_pass_scan() -> list:
     """Two-pass Radar scan: quick scan top 100 → full verdict on each. Returns list of RadarStock dicts."""
     global _radar_cache, _radar_cache_ts, _radar_scan_running
@@ -924,12 +945,12 @@ async def _two_pass_scan() -> list:
 
         logger.info("Radar pass 2: running full verdict on %d stocks", len(top_tickers))
 
-        async def fetch_full(ticker: str, domain: Optional[str]) -> Optional[RadarStock]:
-            async with _SEM:
-                await asyncio.sleep(0.3)
-                return await _full_scan_ticker(ticker, domain)
+        async def fetch_full(ticker: str, domain: Optional[str], idx: int) -> Optional[RadarStock]:
+            # jittered stagger de-synchronises the opening burst that trips Yahoo's crumb/401 guard
+            return await _full_scan_with_retry(ticker, domain, stagger=0.4 + (idx % 5) * 0.12)
 
-        results = await asyncio.gather(*[fetch_full(t, d) for t, d in top_tickers], return_exceptions=True)
+        results = await asyncio.gather(
+            *[fetch_full(t, d, i) for i, (t, d) in enumerate(top_tickers)], return_exceptions=True)
         stocks = [r for r in results if isinstance(r, RadarStock)]
         stocks.sort(key=_radar_sort_key, reverse=True)
 
@@ -1153,12 +1174,11 @@ async def custom_radar(body: CustomRadarRequest, _: str = Depends(verify_token))
 
     t_start = time.time()
 
-    async def fetch(ticker: str) -> Optional[RadarStock]:
-        async with _SEM:
-            await asyncio.sleep(0.2)
-            return await _full_scan_ticker(ticker, domain=None)
+    async def fetch(ticker: str, idx: int) -> Optional[RadarStock]:
+        return await _full_scan_with_retry(ticker, domain=None, stagger=(idx % 5) * 0.1)
 
-    results = await asyncio.gather(*[fetch(t) for t in tickers], return_exceptions=True)
+    results = await asyncio.gather(
+        *[fetch(t, i) for i, t in enumerate(tickers)], return_exceptions=True)
     stocks = [r for r in results if isinstance(r, RadarStock)]
     stocks.sort(key=_radar_sort_key, reverse=True)
 

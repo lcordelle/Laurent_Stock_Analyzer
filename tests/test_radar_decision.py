@@ -74,3 +74,23 @@ def test_keep_previous_cache_guard():
     # small previous (<20) only protected by the <5 rule
     assert _keep_previous_cache(8, 15) is False
     assert _keep_previous_cache(2, 15) is True
+
+
+def test_full_scan_retry_recovers(monkeypatch):
+    calls = {"n": 0}
+    async def flaky(t, d=None):
+        calls["n"] += 1
+        return None if calls["n"] == 1 else "OK"
+    monkeypatch.setattr(opportunities, "_full_scan_ticker", flaky)
+    out = asyncio.run(opportunities._full_scan_with_retry("X", retries=1, backoff=0))
+    assert out == "OK" and calls["n"] == 2
+
+
+def test_full_scan_retry_gives_up(monkeypatch):
+    calls = {"n": 0}
+    async def always_none(t, d=None):
+        calls["n"] += 1
+        return None
+    monkeypatch.setattr(opportunities, "_full_scan_ticker", always_none)
+    out = asyncio.run(opportunities._full_scan_with_retry("X", retries=1, backoff=0))
+    assert out is None and calls["n"] == 2

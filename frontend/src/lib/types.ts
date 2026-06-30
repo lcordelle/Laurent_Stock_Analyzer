@@ -209,39 +209,31 @@ export interface VerdictResponse {
   conflict_note?: string
 }
 
+export interface RadarHorizon {
+  action: string
+  read: string
+  band: string | null
+  percentile: number | null
+  conviction: number
+  direction: string
+  urgency: string            // ACT_NOW | WATCH | REST
+  size_cap_pct: number | null
+  horizon_days: number | null
+}
+
 export interface RadarStock {
   ticker: string
-  name?: string
-  domain?: string
-  price?: number
-  verdict: string
-  composite: number
-  confidence: number
-  signals: {
-    technical: VerdictSignalDetail
-    fundamental: VerdictSignalDetail
-    ai_outlook: VerdictSignalDetail
-    analyst: VerdictSignalDetail
-    momentum: VerdictSignalDetail
-    news_sentiment: VerdictSignalDetail
-    earnings_quality: VerdictSignalDetail
-    risk: VerdictSignalDetail
-  }
-  why: string
-  price_target?: number
-  price_target_bear?: number
-  price_target_bull?: number
-  stop_loss?: number
-  analyst_upside?: number
-  risk_reward?: number
-  ai_price_target?: number
-  entry_timing: string
-  entry_price_zone?: [number, number]
-  action_urgency: string
-  catalyst_event?: string
-  catalyst_days?: number
-  conflict_note?: string
-  position_size_pct?: number
+  name?: string | null
+  domain?: string | null
+  price?: number | null
+  quality_score?: number | null
+  quality_grade?: string | null
+  default_horizon: string
+  horizons: Record<string, RadarHorizon>
+  analyst_upside?: number | null
+  catalyst_event?: string | null
+  catalyst_days?: number | null
+  fair_value_gap_pct?: number | null
 }
 
 export interface RadarResponse {
@@ -251,4 +243,5 @@ export interface RadarResponse {
   shortlist_count: number
   cached_at?: number
   scan_duration_seconds?: number
+  regime?: { label: string; vix: number | null; multiplier: number } | null
 }

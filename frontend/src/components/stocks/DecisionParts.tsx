@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { Decision, Setup } from '../../lib/types'
+import type { Decision, HorizonDecision, Setup } from '../../lib/types'
 import { computeSizing } from '../../lib/sizing'
 
 export const GRADE_COLOR: Record<string, string> = { A: '#00e676', B: '#84cc16', C: '#ffab00', D: '#ff7043', F: '#ff1744' }
@@ -12,29 +12,46 @@ function num(v: string, fallback: number): number {
 }
 
 // ── Compact full-width verdict bar: action · quality · setup · read ──────────
-export function DecisionBar({ decision }: { decision: Decision }) {
-  const { quality, setup, read, action } = decision
+const HORIZON_LABELS: Record<string, string> = { day: 'Day', swing: 'Swing', long: 'Long' }
+const HORIZON_ORDER = ['day', 'swing', 'long']
+
+export function DecisionBar({ decision, horizon, setHorizon, hd }:
+  { decision: Decision; horizon: string; setHorizon: (h: string) => void; hd: HorizonDecision }) {
+  const { quality } = decision
+  const { action, read, setup } = hd
   const aColor = ACTION_COLOR[action] ?? '#94a3b8'
   const gColor = GRADE_COLOR[quality.grade ?? ''] ?? '#94a3b8'
   const bColor = BAND_COLOR[setup.band ?? ''] ?? '#94a3b8'
   const dColor = DIR_COLOR[setup.direction] ?? '#94a3b8'
   return (
-    <div className="rounded-xl border p-3 flex items-center gap-4 flex-wrap"
+    <div className="rounded-xl border p-3 flex flex-col gap-2"
       style={{ backgroundColor: '#111827', borderColor: aColor + '33' }}>
-      <span className="text-2xl font-black px-3 py-1 rounded-lg shrink-0"
-        style={{ backgroundColor: aColor + '22', color: aColor }}>{action}</span>
-      <div className="flex items-center gap-2 shrink-0">
-        <span className="text-xs uppercase tracking-wide" style={{ color: '#475569' }}>Quality</span>
-        <span className="text-lg font-black" style={{ color: gColor }}>{quality.grade ?? '—'}</span>
-        <span className="text-xs tabular-nums" style={{ color: '#94a3b8' }}>{quality.score ?? '—'}</span>
+      <div className="flex items-center gap-4 flex-wrap">
+        <span className="text-2xl font-black px-3 py-1 rounded-lg shrink-0"
+          style={{ backgroundColor: aColor + '22', color: aColor }}>{action}</span>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-xs uppercase tracking-wide" style={{ color: '#475569' }}>Quality</span>
+          <span className="text-lg font-black" style={{ color: gColor }}>{quality.grade ?? '—'}</span>
+          <span className="text-xs tabular-nums" style={{ color: '#94a3b8' }}>{quality.score ?? '—'}</span>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-xs uppercase tracking-wide" style={{ color: '#475569' }}>Setup</span>
+          <span className="text-lg font-black" style={{ color: bColor }}>{setup.band ?? '—'}</span>
+          <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ backgroundColor: dColor + '22', color: dColor }}>{setup.direction}</span>
+          {setup.percentile != null && <span className="text-xs tabular-nums" style={{ color: '#475569' }}>{Math.round(setup.percentile)}th pct · {setup.horizon_days}d</span>}
+        </div>
+        <div className="ml-auto flex rounded-lg overflow-hidden shrink-0" style={{ border: '1px solid rgba(255,255,255,0.08)' }}>
+          {HORIZON_ORDER.filter(h => decision.horizons[h]).map(h => (
+            <button key={h} onClick={() => setHorizon(h)} className="px-2.5 py-1 text-xs font-semibold transition-colors"
+              style={{ backgroundColor: horizon === h ? '#00d4ff' : 'transparent', color: horizon === h ? '#0a0e1a' : '#94a3b8' }}>
+              {HORIZON_LABELS[h] ?? h}
+            </button>
+          ))}
+        </div>
       </div>
-      <div className="flex items-center gap-2 shrink-0">
-        <span className="text-xs uppercase tracking-wide" style={{ color: '#475569' }}>Setup</span>
-        <span className="text-lg font-black" style={{ color: bColor }}>{setup.band ?? '—'}</span>
-        <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ backgroundColor: dColor + '22', color: dColor }}>{setup.direction}</span>
-        {setup.percentile != null && <span className="text-xs tabular-nums" style={{ color: '#475569' }}>{Math.round(setup.percentile)}th pct</span>}
+      <div className="flex items-start gap-2 text-sm" style={{ color: '#cbd5e1' }}>
+        <span style={{ color: '#475569' }}>▸</span><span>{read}</span>
       </div>
-      <span className="text-sm flex-1 min-w-[12rem]" style={{ color: '#cbd5e1' }}>{read}</span>
     </div>
   )
 }

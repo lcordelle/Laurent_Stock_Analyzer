@@ -293,6 +293,7 @@ export default function Analysis() {
   const [inputTicker, setInputTicker] = useState(searchParams.get('ticker') ?? '')
   const [period, setPeriod] = useState('1y')
   const [watchlisted, setWatchlisted] = useState(false)
+  const [horizon, setHorizon] = useState('swing')
   const ticker = searchParams.get('ticker') ?? ''
 
   const { data, isLoading, isError, error } = useQuery<FullStockAnalysis>({
@@ -311,6 +312,7 @@ export default function Analysis() {
   }, [data])
 
   useEffect(() => { setWatchlisted(isInWatchlist(ticker)) }, [ticker])
+  useEffect(() => { setHorizon(data?.decision?.default_horizon ?? 'swing') }, [data?.decision?.default_horizon])
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
@@ -321,6 +323,7 @@ export default function Analysis() {
   // ── Derived values ──────────────────────────────────────────────────────────
   const met = data?.metrics
   const sig = data?.trading_signals
+  const hd = data?.decision ? (data.decision.horizons[horizon] ?? data.decision.horizons.swing) : null
   const rat = data?.analyst_rating
   const rsk = data?.risk_profile
 
@@ -487,7 +490,7 @@ export default function Analysis() {
             )}
 
             {/* ── Decision cockpit: verdict sidebar + chart ──────────────────── */}
-            {data.decision && <DecisionBar decision={data.decision} />}
+            {data.decision && hd && <DecisionBar decision={data.decision} horizon={horizon} setHorizon={setHorizon} hd={hd} />}
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-4" data-testid="stock-header">
 
@@ -519,10 +522,10 @@ export default function Analysis() {
                   </div>
                 )}
 
-                {data.decision && (
+                {hd && (
                   <div className="rounded-xl border p-4 flex flex-col gap-3" style={{ backgroundColor: '#111827', borderColor: 'rgba(255,255,255,0.06)' }}>
-                    <SetupDrivers setup={data.decision.setup} />
-                    <PositionSizing score={data.decision.setup.score} entry={data.trading_signals?.optimal_entry ?? null} stop={data.trading_signals?.stop_loss ?? null} currentPrice={data.metrics?.current_price ?? data.ohlcv.at(-1)?.close ?? null} />
+                    <SetupDrivers setup={hd.setup} />
+                    <PositionSizing score={hd.setup.score} entry={data.trading_signals?.optimal_entry ?? null} stop={data.trading_signals?.stop_loss ?? null} currentPrice={data.metrics?.current_price ?? data.ohlcv.at(-1)?.close ?? null} />
                   </div>
                 )}
 

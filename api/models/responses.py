@@ -124,11 +124,16 @@ class Setup(BaseModel):
     regime: DecisionRegime
 
 
+class HorizonDecision(BaseModel):
+    action: str
+    read: str
+    setup: Setup
+
+
 class Decision(BaseModel):
     quality: Quality
-    setup: Setup
-    read: str
-    action: str
+    default_horizon: str
+    horizons: dict[str, HorizonDecision]
 
 
 class TradingSignals(BaseModel):

@@ -13,7 +13,7 @@ import yfinance as yf
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.decision_engine import HORIZON_PROFILES  # noqa: E402
 from utils.calibration import (SP100, observations_for_history, bucketize,  # noqa: E402
-                               conviction_percentiles, HORIZON_DAYS)
+                               conviction_percentiles)
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _CACHE = os.path.join(_ROOT, "data", "cal_cache")

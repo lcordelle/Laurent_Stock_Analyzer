@@ -153,3 +153,28 @@ def test_horizon_profiles_shape():
     for k, p in HORIZON_PROFILES.items():
         assert set(p["weights"]) == {"Technical", "Trend", "Valuation"}
         assert p["window"] > 0 and p["label"]
+
+
+from utils.decision_engine import action_urgency, size_cap_pct, ACTION_RANK
+
+
+def test_action_urgency_mapping():
+    assert action_urgency("STRONG BUY") == "ACT_NOW"
+    assert action_urgency("BUY") == "ACT_NOW"
+    assert action_urgency("ACCUMULATE") == "WATCH"
+    assert action_urgency("WATCH") == "WATCH"
+    assert action_urgency("SPECULATIVE") == "REST"
+    assert action_urgency("AVOID") == "REST"
+
+
+def test_size_cap_pct_bounds():
+    assert size_cap_pct(0) == 0
+    assert size_cap_pct(5) == 50
+    assert size_cap_pct(10) == 100
+    assert size_cap_pct(99) == 100
+    assert size_cap_pct(-3) == 0
+
+
+def test_action_rank_order():
+    assert (ACTION_RANK["STRONG BUY"] > ACTION_RANK["BUY"] > ACTION_RANK["ACCUMULATE"]
+            > ACTION_RANK["WATCH"] > ACTION_RANK["SPECULATIVE"] > ACTION_RANK["AVOID"])

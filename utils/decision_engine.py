@@ -211,3 +211,22 @@ def decide_action(grade: Optional[str], band: Optional[str], direction: str, hor
     if grade == "C":
         return "BUY" if band in ("Prime", "Strong") else "WATCH"
     return "SPECULATIVE" if band in ("Prime", "Strong") else "AVOID"
+
+
+ACTION_RANK = {"STRONG BUY": 5, "BUY": 4, "ACCUMULATE": 3, "WATCH": 2, "SPECULATIVE": 1, "AVOID": 0}
+
+
+def action_urgency(action: str) -> str:
+    if action in ("STRONG BUY", "BUY"):
+        return "ACT_NOW"
+    if action in ("ACCUMULATE", "WATCH"):
+        return "WATCH"
+    return "REST"
+
+
+def size_cap_pct(conviction: float) -> float:
+    try:
+        c = max(0.0, min(10.0, float(conviction)))
+    except (TypeError, ValueError):
+        return 0.0
+    return round(c * 10.0, 0)

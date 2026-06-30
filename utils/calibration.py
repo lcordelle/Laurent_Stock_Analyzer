@@ -77,14 +77,14 @@ def synth_signals(rsi, macd_hist, sma20, sma50, sma200, adx, close) -> dict:
     return {"trend_strength": ts, "signal": sig, "confidence": conf, "signal_quality": qual}
 
 
-def bar_conviction(rsi, macd_hist, sma20, sma50, sma200, adx, close, vix):
+def bar_conviction(rsi, macd_hist, sma20, sma50, sma200, adx, close, vix, weights=None):
     signals = synth_signals(rsi, macd_hist, sma20, sma50, sma200, adx, close)
     # Valuation proxy: price vs SMA50 as fair value, fed through the engine's _valuation.
     tunnel = None
     if sma50 is not None and not np.isnan(sma50) and sma50 > 0:
         tunnel = {"current_vs_fair_pct": (close / sma50 - 1.0) * 100.0}
     regime = regime_for_vix(vix)
-    d = compute_conviction(score=None, signals=signals, forecast=None, tunnel=tunnel, regime=regime)
+    d = compute_conviction(score=None, signals=signals, forecast=None, tunnel=tunnel, regime=regime, weights=weights)
     return d["conviction"], d["direction"]
 
 
@@ -114,7 +114,7 @@ def _indicators(hist: pd.DataFrame):
 
 
 def observations_for_history(hist: pd.DataFrame, vix_series: pd.Series,
-                             horizon: int = HORIZON_DAYS) -> list:
+                             horizon: int = HORIZON_DAYS, weights=None) -> list:
     if hist is None or len(hist) < 60 + horizon:
         return []
     c = hist["Close"].reset_index(drop=True)
@@ -127,7 +127,7 @@ def observations_for_history(hist: pd.DataFrame, vix_series: pd.Series,
             continue
         conv, direction = bar_conviction(
             _nan(rsi, i), _nan(macd_hist, i), _nan(sma20, i), _nan(sma50, i),
-            _nan(sma200, i), _nan(adx, i), float(c.iloc[i]), _nan(vix, i))
+            _nan(sma200, i), _nan(adx, i), float(c.iloc[i]), _nan(vix, i), weights)
         out.append({"conviction": conv, "direction": direction, "fwd_return": float(fwd.iloc[i])})
     return out
 

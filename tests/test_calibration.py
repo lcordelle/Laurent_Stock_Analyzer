@@ -95,3 +95,19 @@ def test_band_for_cutoffs():
     assert band_for(80) == "Strong"
     assert band_for(95) == "Prime"
     assert band_for(None) is None
+
+
+def test_observations_honor_weights():
+    import numpy as np
+    import pandas as pd
+    from utils.calibration import observations_for_history, HORIZON_DAYS
+    n = 200
+    close = pd.Series([100 * (1.001 ** i) + (i % 7) for i in range(n)])
+    hist = pd.DataFrame({"Open": close, "High": close * 1.01, "Low": close * 0.99,
+                         "Close": close, "Volume": [1e6] * n})
+    vix = pd.Series([16.0] * n)
+    day = observations_for_history(hist, vix, HORIZON_DAYS, {"Technical": 0.6, "Trend": 0.3, "Valuation": 0.1})
+    lng = observations_for_history(hist, vix, HORIZON_DAYS, {"Technical": 0.2, "Trend": 0.3, "Valuation": 0.5})
+    assert len(day) == len(lng) and len(day) > 0
+    # different weight profiles must move at least some convictions
+    assert any(abs(d["conviction"] - l["conviction"]) > 1e-6 for d, l in zip(day, lng))

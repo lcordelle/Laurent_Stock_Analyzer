@@ -93,7 +93,7 @@ def compute_conviction(score, signals, forecast, tunnel, regime, weights=None) -
         "Valuation": "fair-value & forecast",
     }
     avail = {k: v for k, v in subs.items() if v is not None}
-    total_w = sum(weights[k] for k in avail) or 1.0
+    total_w = sum(weights.get(k, 0.0) for k in avail) or 1.0
     raw = sum(subs[k] * weights[k] for k in avail) / total_w  # [-1,1]
 
     regime_label = (regime or {}).get("regime") or "Unknown"
@@ -106,7 +106,7 @@ def compute_conviction(score, signals, forecast, tunnel, regime, weights=None) -
     factors = [{
         "label": k,
         "subscore": round(subs[k], 3) if subs[k] is not None else None,
-        "weight": weights[k],
+        "weight": weights.get(k, 0.0),
         "contribution": round((subs[k] * weights[k] / total_w), 3) if subs[k] is not None else None,
         "detail": details[k],
     } for k in DEFAULT_WEIGHTS]

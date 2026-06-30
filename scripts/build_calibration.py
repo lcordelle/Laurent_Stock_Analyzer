@@ -11,6 +11,7 @@ import pandas as pd
 import yfinance as yf
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils.decision_engine import HORIZON_PROFILES  # noqa: E402
 from utils.calibration import (SP100, observations_for_history, bucketize,  # noqa: E402
                                conviction_percentiles, HORIZON_DAYS)
 
@@ -54,32 +55,39 @@ def main():
     except Exception as e:
         print(f"VIX fetch failed ({e}); regimes will be Unknown")
 
-    all_obs, covered, failed = [], 0, []
+    horizons_obs = {k: [] for k in HORIZON_PROFILES}
+    covered, failed = 0, []
     for i, t in enumerate(universe, 1):
         print(f"[{i}/{len(universe)}] {t}")
         h = _load_ticker(t)
         if h is None or h.empty:
             failed.append(t); continue
         h.index = h.index.tz_localize(None) if getattr(h.index, "tz", None) is not None else h.index
-        obs = observations_for_history(h, vix, HORIZON_DAYS)
-        all_obs.extend(obs); covered += 1
+        for key, prof in HORIZON_PROFILES.items():
+            horizons_obs[key].extend(observations_for_history(h, vix, prof["window"], prof["weights"]))
+        covered += 1
         time.sleep(0.5)  # throttle
 
-    buckets = bucketize(all_obs)
+    horizons = {}
+    for key, prof in HORIZON_PROFILES.items():
+        obs = horizons_obs[key]
+        horizons[key] = {
+            "horizon_days": prof["window"],
+            "total_obs": len(obs),
+            "buckets": bucketize(obs),
+            "conviction_percentiles": conviction_percentiles(obs),
+        }
     table = {
         "generated_at": time.strftime("%Y-%m-%d"),
-        "horizon_days": HORIZON_DAYS,
         "universe": "SP100",
         "universe_size": covered,
         "failed": failed,
-        "total_obs": len(all_obs),
-        "conviction_percentiles": conviction_percentiles(all_obs),
-        "buckets": buckets,
+        "horizons": horizons,
     }
     os.makedirs(os.path.dirname(_OUT), exist_ok=True)
     with open(_OUT, "w") as f:
         json.dump(table, f, indent=2)
-    print(f"Wrote {_OUT}: {covered} tickers, {len(all_obs)} obs, {len(failed)} failed")
+    print(f"Wrote {_OUT}: {covered} tickers, {len(failed)} failed, horizons " + ", ".join(f"{k}={len(horizons_obs[k])}" for k in horizons))
 
 
 if __name__ == "__main__":

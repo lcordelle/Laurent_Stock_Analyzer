@@ -6,6 +6,7 @@ export const GRADE_COLOR: Record<string, string> = { A: '#00e676', B: '#84cc16',
 export const BAND_COLOR: Record<string, string> = { Prime: '#00e676', Strong: '#84cc16', Fair: '#ffab00', Weak: '#ff7043' }
 export const DIR_COLOR: Record<string, string> = { Long: '#00e676', Short: '#ff1744', 'Stand aside': '#ffab00' }
 export const ACTION_COLOR: Record<string, string> = { 'STRONG BUY': '#00e676', BUY: '#00e676', ACCUMULATE: '#84cc16', WATCH: '#ffab00', SPECULATIVE: '#ff7043', AVOID: '#ff1744' }
+export const BAND_GLOSS: Record<string, string> = { Weak: 'poor entry right now', Fair: 'below-average timing', Strong: 'good entry', Prime: 'excellent entry' }
 
 function num(v: string, fallback: number): number {
   const n = parseFloat(v.replace(/[^0-9.]/g, '')); return isNaN(n) ? fallback : n
@@ -34,9 +35,11 @@ export function DecisionBar({ decision, horizon, setHorizon, hd }:
           <span className="text-lg font-black" style={{ color: gColor }}>{quality.grade ?? '—'}</span>
           <span className="text-xs tabular-nums" style={{ color: '#94a3b8' }}>{quality.score ?? '—'}</span>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="text-xs uppercase tracking-wide" style={{ color: '#475569' }}>Setup</span>
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          <span className="text-xs uppercase tracking-wide cursor-help" style={{ color: '#475569' }}
+            title="Entry timing — is now a good moment to buy? Scored from price action only: trend, momentum, and price vs its fair-value channel, adjusted for the market mood, then ranked against ~120k historical setups. Excludes company quality (that's the Quality axis).">Entry timing ⓘ</span>
           <span className="text-lg font-black" style={{ color: bColor }}>{setup.band ?? '—'}</span>
+          {setup.band && <span className="text-xs" style={{ color: '#475569' }}>— {BAND_GLOSS[setup.band] ?? ''}</span>}
           <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ backgroundColor: dColor + '22', color: dColor }}>{setup.direction}</span>
           {setup.percentile != null && <span className="text-xs tabular-nums" style={{ color: '#475569' }}>{Math.round(setup.percentile)}th pct · {setup.horizon_days}d</span>}
         </div>
@@ -60,7 +63,7 @@ export function DecisionBar({ decision, horizon, setHorizon, hd }:
 export function SetupDrivers({ setup }: { setup: Setup }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-xs uppercase tracking-wide" style={{ color: '#475569' }}>Setup drivers</span>
+      <span className="text-xs uppercase tracking-wide" style={{ color: '#475569' }}>Entry-timing drivers</span>
       {setup.factors.map(f => {
         const c = f.contribution ?? 0; const pos = c >= 0
         return (
@@ -126,7 +129,7 @@ export function PositionSizing({ score, entry, stop, currentPrice }: { score: nu
           <SizeStat label="Shares" value={sizing.shares.toLocaleString()} />
           <SizeStat label="Position" value={usd(sizing.positionDollars)} sub={`${sizing.pctOfEquity.toFixed(1)}% acct`} />
           <SizeStat label="At risk" value={usd(sizing.riskDollars)} sub={`${sizing.riskPct.toFixed(2)}%`} />
-          <SizeStat label="Setup-scaled" value={`${(score * 10).toFixed(0)}% max`} sub={sizing.capped ? 'capped' : ''} />
+          <SizeStat label="Timing-scaled" value={`${(score * 10).toFixed(0)}% max`} sub={sizing.capped ? 'capped' : ''} />
         </div>
       ) : (<div className="text-xs" style={{ color: '#ffab00' }}>{sizing.reason}</div>)}
     </div>

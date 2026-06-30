@@ -782,6 +782,20 @@ def _radar_sort_key(s: RadarStock):
     return (rank, s.quality_score or -1, pct)
 
 
+def _keep_previous_cache(new_count: int, prev_count: int) -> bool:
+    """True when a fresh scan is too thin to replace the previous cache.
+
+    Yahoo throttling (HTTP 401 / rate-limit) can make pass-2 drop most tickers,
+    yielding a sparse board. Don't let a degraded scan clobber a healthy cache:
+    keep the prior result when the new one is far smaller, or near-empty.
+    """
+    if prev_count >= 20 and new_count < prev_count * 0.6:
+        return True
+    if new_count < 5 and prev_count > 0:
+        return True
+    return False
+
+
 def _safe_float_radar(v) -> Optional[float]:
     """NaN/inf-safe float for RadarStock fields."""
     import math
@@ -924,8 +938,10 @@ async def _two_pass_scan() -> list:
 
         stocks_dicts = [s.model_dump() for s in stocks]
 
-        if len(stocks) < 5 and _radar_cache is not None and len(_radar_cache) > 0:
-            logger.warning("Radar scan yielded only %d results (rate limited?), keeping cache", len(stocks))
+        prev = len(_radar_cache) if _radar_cache else 0
+        if _keep_previous_cache(len(stocks), prev):
+            logger.warning("Radar scan thin (%d vs cached %d) — likely rate-limited; keeping previous cache",
+                           len(stocks), prev)
             return _radar_cache
 
         _radar_cache = stocks_dicts

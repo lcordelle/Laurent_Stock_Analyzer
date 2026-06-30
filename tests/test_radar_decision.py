@@ -54,3 +54,23 @@ def test_radar_builder_skips_when_no_decision(monkeypatch):
                              earnings_dates=[], decision=None)
     monkeypatch.setattr(opportunities, "_analyze_ticker", lambda t, p="1y": fake)
     assert asyncio.run(opportunities._full_scan_ticker("XYZ")) is None
+
+
+from api.routes.opportunities import _keep_previous_cache
+
+
+def test_keep_previous_cache_guard():
+    # healthy cache, thin new scan -> keep previous
+    assert _keep_previous_cache(10, 100) is True
+    assert _keep_previous_cache(50, 100) is True       # 50 < 60
+    # new scan as complete (or more) than previous -> accept
+    assert _keep_previous_cache(64, 100) is False      # 64 >= 60
+    assert _keep_previous_cache(100, 100) is False
+    assert _keep_previous_cache(120, 100) is False
+    # near-empty new scan with any previous -> keep
+    assert _keep_previous_cache(3, 10) is True
+    # cold start (no previous) -> accept whatever we got
+    assert _keep_previous_cache(10, 0) is False
+    # small previous (<20) only protected by the <5 rule
+    assert _keep_previous_cache(8, 15) is False
+    assert _keep_previous_cache(2, 15) is True

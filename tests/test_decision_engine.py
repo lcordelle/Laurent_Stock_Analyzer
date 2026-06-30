@@ -132,3 +132,24 @@ def test_decide_action_direction_and_missing():
     assert decide_action("A", "Strong", "Stand aside") == "WATCH"
     assert decide_action(None, "Strong", "Long") == "WATCH"
     assert decide_action("A", None, "Long") == "WATCH"
+
+
+from utils.decision_engine import HORIZON_PROFILES
+
+
+def test_decide_action_horizon_divergence():
+    from utils.decision_engine import decide_action as da
+    # A-quality, Weak setup, Long direction — diverges by horizon
+    assert da("A", "Weak", "Long", "day") == "AVOID"
+    assert da("A", "Weak", "Long", "swing") == "WATCH"
+    assert da("A", "Weak", "Long", "long") == "ACCUMULATE"
+    # strong setup
+    assert da("A", "Prime", "Long", "day") == "STRONG BUY"
+    assert da("F", "Weak", "Long", "long") == "AVOID"
+
+
+def test_horizon_profiles_shape():
+    assert set(HORIZON_PROFILES) == {"day", "swing", "long"}
+    for k, p in HORIZON_PROFILES.items():
+        assert set(p["weights"]) == {"Technical", "Trend", "Valuation"}
+        assert p["window"] > 0 and p["label"]

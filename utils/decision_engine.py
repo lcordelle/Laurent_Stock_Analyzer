@@ -2,6 +2,12 @@
 from typing import Optional
 
 DEFAULT_WEIGHTS = {"Fundamentals": 0.30, "Technical": 0.30, "Trend": 0.20, "Valuation": 0.20}
+
+HORIZON_PROFILES = {
+    "day":   {"window": 5,   "label": "Day-trade", "weights": {"Technical": 0.6, "Trend": 0.3, "Valuation": 0.1}},
+    "swing": {"window": 30,  "label": "Swing",     "weights": {"Technical": 0.4, "Trend": 0.3, "Valuation": 0.3}},
+    "long":  {"window": 120, "label": "Long-term", "weights": {"Technical": 0.2, "Trend": 0.3, "Valuation": 0.5}},
+}
 REGIME_MULT = {"Risk-On": 1.0, "Neutral": 0.85, "Risk-Off": 0.65, "Danger": 0.45, "Unknown": 1.0}
 _SIGNAL_MAP = {"STRONG BUY": 1.0, "BUY": 0.6, "HOLD": 0.0, "NEUTRAL": 0.0,
                "SELL": -0.6, "STRONG SELL": -1.0}
@@ -134,7 +140,21 @@ def quality_grade(score) -> Optional[str]:
     return "F"
 
 
-def read_line(grade: Optional[str], setup_band: Optional[str], direction: str) -> str:
+def read_line(grade: Optional[str], setup_band: Optional[str], direction: str, horizon: str = "swing") -> str:
+    if grade is not None and setup_band is not None and horizon == "day":
+        if setup_band in ("Strong", "Prime"):
+            return f"Momentum {direction.lower()} setup for an intraday/short swing — technicals lead; manage tightly."
+        return "No intraday edge — technicals don't support a day trade here; stand aside."
+    if grade is not None and setup_band is not None and horizon == "long":
+        q_strong_l = grade in ("A", "B"); q_weak_l = grade in ("D", "F")
+        s_good_l = setup_band in ("Strong", "Prime")
+        if q_strong_l and s_good_l:
+            return "High-quality compounder with a strong long-term setup — accumulate with conviction."
+        if q_strong_l:
+            return "High-quality compounder; entry is soft but matters little over months — start scaling in, add on weakness."
+        if q_weak_l:
+            return "Weak fundamentals — not a long-term hold regardless of price; avoid."
+        return "Average quality for a long-term hold — own only at a clear value entry."
     q_strong = grade in ("A", "B")
     q_weak = grade in ("D", "F")
     s_good = setup_band in ("Strong", "Prime")
@@ -156,13 +176,30 @@ def read_line(grade: Optional[str], setup_band: Optional[str], direction: str) -
     return "Average quality and a soft setup — no edge; wait for a better entry."
 
 
-def decide_action(grade: Optional[str], band: Optional[str], direction: str) -> str:
+def decide_action(grade: Optional[str], band: Optional[str], direction: str, horizon: str = "swing") -> str:
     if direction == "Short":
         return "AVOID"
     if direction == "Stand aside":
         return "WATCH"
-    if grade is None or band is None:
+    if band is None:
         return "WATCH"
+    if horizon == "day":
+        # Day-trade: setup is the whole call; quality is irrelevant intraday.
+        return {"Prime": "STRONG BUY", "Strong": "BUY", "Fair": "WATCH", "Weak": "AVOID"}.get(band, "WATCH")
+    if grade is None:
+        return "WATCH"
+    if horizon == "long":
+        # Long-term: quality leads; a soft entry on a quality name is still an accumulate.
+        if grade in ("A", "B"):
+            if band == "Prime":
+                return "STRONG BUY"
+            if band == "Strong":
+                return "BUY"
+            return "ACCUMULATE"
+        if grade == "C":
+            return "BUY" if band in ("Prime", "Strong") else "WATCH"
+        return "AVOID"
+    # swing (default): balanced quality x setup matrix.
     if grade in ("A", "B"):
         if band == "Prime":
             return "STRONG BUY"
